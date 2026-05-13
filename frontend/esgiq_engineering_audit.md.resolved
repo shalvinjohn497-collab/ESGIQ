@@ -1,0 +1,821 @@
+# ESGIQ Platform — Complete Engineering Intelligence Audit
+**Generated:** 2026-05-09 | **Auditor:** AI Engineering Analysis | **Codebase Revision:** Post-Final-Polish Phase
+
+---
+
+## 1. PROJECT OVERVIEW
+
+### Actual Current Architecture
+ESGIQ is a **pure SPA (Single Page Application)** built with React 18 + Vite 5. There is no backend, no database, and no authentication beyond a UI state flag. The entire application runs inside [AppShell.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/app/AppShell.jsx), which acts as the routing controller using conditional rendering — **no React Router is used for page navigation despite being a dependency**.
+
+### Main Application Flow
+```
+main.jsx → App.jsx (root) → AppShell.jsx (controls screen/nav state)
+                          → LoginPage (screen === 'login')
+                          → DashboardLayout (screen === 'app')
+                               ├─ Sidebar (nav state)
+                               ├─ Topbar (always visible, step state)
+                               └─ Content (nav switch)
+                                    ├─ DashboardPage
+                                    ├─ AssessmentWizardPage (step 1/2/3)
+                                    ├─ CertificationsPage
+                                    ├─ ReportsPage
+                                    └─ SettingsPage
+```
+
+### Frontend Stack
+| Layer | Technology | Version |
+|---|---|---|
+| Framework | React | 18.3.1 |
+| Build | Vite | 5.4.21 |
+| Routing | None (conditional render) | — |
+| State | Zustand | 4.5.5 |
+| Animation | Framer Motion | ^11 |
+| Charts | Recharts | 2.12.7 |
+| Icons | Lucide React | 0.441.0 |
+| CSS | Custom design system (index.css) | — |
+| Type-checking | None (JSX only, no TypeScript) | — |
+| Testing | None | — |
+
+### State Management Architecture
+Three Zustand stores:
+- [ui.store.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/store/ui.store.js) — nav, presentationMode, togglePresentation
+- [assessment.store.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/modules/assessment/store/assessment.store.js) (in modules/) — step, rows, flags with init from MOCK data
+- [auth.store.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/store/auth.store.js) — exists but **not used anywhere in the app**
+
+### Routing Structure
+**No URL-based routing.** [AppShell.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/app/AppShell.jsx) switches between `screen === 'login'` and `screen === 'app'`. Within the app, `nav` state drives which page renders. `react-router-dom` is installed but completely unused. Back/forward browser navigation does nothing.
+
+### Styling System
+Single-file CSS design system ([index.css](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/index.css), 802 lines) with:
+- CSS custom properties as design tokens
+- Utility classes (flex, grid, spacing, typography)
+- Component classes (card, badge, btn, sidebar, topbar, progress)
+- 8px grid spacing (--sp-1 through --sp-12)
+
+### Animation System
+Dual system — a hybrid:
+- CSS keyframe `fadeIn` + `.animate-in` class (page transitions)
+- Framer Motion: `motion.div`, `AnimatePresence`, `staggerChildren` (dashboard sections, overlay, count-up)
+- Inconsistency: some pages use `.animate-in`, dashboard uses Framer Motion
+
+### Charting System
+Recharts library, used in:
+- [ESGRadarChart.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/charts/ESGRadarChart.jsx) (ResultsStep)
+- [EmissionsChart.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/charts/EmissionsChart.jsx) (unused on main dashboard)
+- [TrendAreaChart.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/charts/TrendAreaChart.jsx) (unused on main dashboard)
+- [ReadinessGauge.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/charts/ReadinessGauge.jsx) (unused on main dashboard)
+
+**Critical:** 3 of 4 chart components are defined but not rendered on the main dashboard. Bundle weight incurred without visible value.
+
+### Data Flow Overview
+```
+Mock Data (INIT_ROWS, INIT_FLAGS) → assessment.store
+     → DataUploadStep (user edits rows/flags)
+     → useAssessmentScoring(rows, flags) [useMemo hook]
+     → scores object → DashboardPage, ResultsStep, SummaryStep
+```
+All scoring is pure frontend computation. No API call is made at any point during normal usage flow.
+
+### Mock vs Real Logic Identification
+| Category | Status |
+|---|---|
+| Energy scoring | Real calculation, mock default data |
+| Water/Waste/Gov scoring | Real calculation, mock default flags |
+| Emissions (Scope 1, 2) | Real formula, mock default inputs |
+| Scope 3 emissions | **Fake**: hardcoded as 12% of Scope 2 |
+| Certification scores | **Fully hardcoded** static arrays |
+| Dashboard actions | **Fully hardcoded** static list |
+| Benchmark data | **Fully hardcoded** static values |
+| Trend data | **Fully hardcoded** static progression |
+| Strengths/Gaps in ResultsStep | **Fully hardcoded** static strings |
+| Auth | **Fake**: any credentials work |
+| Reports download | **Dead**: buttons do nothing |
+| Settings toggles | **Dead**: all noop handlers |
+
+---
+
+## 2. COMPLETE FOLDER TREE
+
+```
+src/
+├── app/
+│   ├── AppShell.jsx         [~55 LOC] Core app controller. High dependency — all pages route through here. ACTIVE.
+│   └── providers/           [Empty/minimal]
+│
+├── calculations/
+│   ├── emissions/
+│   │   ├── calculateScope1.js      [11 LOC] Diesel → tCO₂e. Factor 2.68. ACTIVE. Backend-ready.
+│   │   ├── calculateScope2.js      [11 LOC] Grid kWh → tCO₂e. Factor 0.82. ACTIVE. Backend-ready.
+│   │   ├── calculateScope3.js      [11 LOC] Scope3 = Scope2 × 0.12. FAKE PROXY. Not industry-standard.
+│   │   └── calculateTotalEmissions.js [13 LOC] Sum of scopes. ACTIVE. Trivial.
+│   ├── energy/
+│   │   ├── calculateEnergyScore.js  [21 LOC] Additive flag-based scoring. ACTIVE. Prototype-grade.
+│   │   ├── calculateIntensity.js    [13 LOC] kWh/sqft. ACTIVE. Basic.
+│   │   └── calculateRenewableShare.js [13 LOC] % renewable. ACTIVE. Simple division.
+│   └── scoring/
+│       ├── calculateOverallScore.js     [18 LOC] Weighted sum E+W+Wt+G. ACTIVE. Key function.
+│       ├── calculateReadiness.js        [61 LOC] Actually contains Water/Waste/Gov scoring + readiness label. MISLEADING FILENAME.
+│       └── determineCertificationLevel.js [20 LOC] Level label from overall score. ACTIVE.
+│
+├── components/
+│   ├── cards/
+│   │   ├── CertificationCard.jsx   [~40 LOC] Used in CertificationsPage grid. ACTIVE.
+│   │   ├── ESGScoreCard.jsx        [~55 LOC] Count-up animation. Dashboard hero. ACTIVE. Critical.
+│   │   ├── GlassCard.jsx           [~20 LOC] Glassmorphism wrapper. Usage unclear — POTENTIALLY DEAD.
+│   │   ├── MetricCard.jsx          [~30 LOC] Generic KPI card. Usage unclear — POTENTIALLY DEAD.
+│   │   └── StatusCard.jsx          [~30 LOC] Card with ProgressBar. Usage unclear — POTENTIALLY DEAD.
+│   ├── charts/
+│   │   ├── ESGRadarChart.jsx       [~40 LOC] Used in ResultsStep. ACTIVE but only in wizard.
+│   │   ├── EmissionsChart.jsx      [~35 LOC] NOT rendered on dashboard. BUNDLE WEIGHT, potentially dead.
+│   │   ├── ReadinessGauge.jsx      [~30 LOC] NOT rendered anywhere visible. LIKELY DEAD.
+│   │   └── TrendAreaChart.jsx      [~35 LOC] NOT rendered on dashboard. LIKELY DEAD.
+│   ├── feedback/
+│   │   ├── ESGProcessingOverlay.jsx [~70 LOC] 1.4s orchestration overlay. ACTIVE. New.
+│   │   ├── EmptyState.jsx           [~20 LOC] Generic empty state. Usage unclear.
+│   │   ├── LoadingScreen.jsx        [~20 LOC] Full-page loader. NOT used (no async operations).
+│   │   └── ValidationAlert.jsx      [~25 LOC] Info/warning alert. Used in DataUploadStep.
+│   ├── indicators/
+│   │   ├── ProgressBar.jsx         [~25 LOC] Framer Motion animated. Used widely. ACTIVE.
+│   │   ├── RiskIndicator.jsx       [~25 LOC] Risk level badge. Used in CertificationsPage.
+│   │   ├── ScoreRing.jsx           [~40 LOC] SVG ring chart. Dashboard + Wizard hero. CRITICAL.
+│   │   └── StatusBadge.jsx         [~20 LOC] Pill badge. Used in ResultsStep.
+│   ├── intelligence/
+│   │   ├── BenchmarkStrip.jsx      [~65 LOC] Healthcare benchmark comparison. Dashboard. ACTIVE. New.
+│   │   └── ESGAnalystPanel.jsx     [~60 LOC] 4 deterministic insights. Dashboard. ACTIVE. New.
+│   ├── tables/
+│   │   ├── DataTable.jsx           [~40 LOC] Generic sortable table. NOT obviously used.
+│   │   └── MetricsTable.jsx        [~35 LOC] Metrics-specific table. NOT obviously used.
+│   └── ui/
+│       ├── Button.jsx              [~25 LOC] Primary/secondary variants. Used in wizard steps.
+│       ├── Input.jsx               [~20 LOC] Styled input. May be superseded by direct CSS input.
+│       ├── Modal.jsx               [~30 LOC] Portal-based modal. NOT obviously used.
+│       └── Toggle.jsx              [~30 LOC] On/off toggle. Used in DataUploadStep, SettingsPage.
+│       └── Tooltip.jsx             [~25 LOC] Hover tooltip. NOT obviously used.
+│
+├── constants/
+│   ├── certifications.js   [18 LOC] HARDCODED cert scores, pathways. Critical for UI but STATIC.
+│   ├── routes.js           [~15 LOC] Route constants — UNUSED (no React Router).
+│   └── scoring.js          [37 LOC] Weights, thresholds, labels. ACTIVE. Source of truth.
+│
+├── hooks/
+│   ├── useDebounce.js      [~15 LOC] Debounce hook. NOT used in current visible pages.
+│   ├── useModal.js         [~15 LOC] Modal state hook. NOT used (no modals visible).
+│   └── useResponsive.js    [~18 LOC] Breakpoint detection. NOT used — app has no responsive logic.
+│
+├── layouts/
+│   └── DashboardLayout/
+│       ├── DashboardLayout.jsx [~50 LOC] Layout shell with presentation mode. ACTIVE.
+│       ├── Sidebar.jsx          [36 LOC] Icon-only nav sidebar. ACTIVE.
+│       └── Topbar.jsx           [~65 LOC] Step indicators + Presentation Mode toggle. ACTIVE.
+│
+├── modules/
+│   └── assessment/
+│       ├── components/
+│       │   ├── AssessmentStep.jsx     [~30 LOC] Step wrapper. Possibly unused.
+│       │   ├── ModuleSection.jsx      [~25 LOC] Section wrapper. Possibly unused.
+│       │   ├── UploadCard.jsx         [~40 LOC] Category card in DataUploadStep.
+│       │   └── ValidationPanel.jsx    [~35 LOC] Validation summary. Possibly unused.
+│       ├── configs/
+│       │   ├── energy.module.jsx      [~40 LOC] Defines UPLOAD_CATEGORIES. ACTIVE via DataUploadStep.
+│       │   ├── governance.module.js   [~15 LOC] Gov config. Possibly partially dead.
+│       │   ├── waste.module.js        [~15 LOC] Waste config. Possibly partially dead.
+│       │   └── water.module.js        [~15 LOC] Water config. Possibly partially dead.
+│       ├── hooks/
+│       │   ├── useAssessmentFlow.js   [31 LOC] Wizard nav helper. Uses assessment.store.
+│       │   ├── useAssessmentScoring.js [52 LOC] Core scoring hook. CRITICAL. ACTIVE.
+│       │   └── useModuleValidation.js  [~25 LOC] Validation per module. Possibly unused.
+│       ├── services/
+│       │   ├── assessment.service.js  [~20 LOC] Service wrapper. NOT connected to real API.
+│       │   └── uploads.service.js     [~20 LOC] Upload service. NOT connected to real API.
+│       ├── steps/
+│       │   ├── DataUploadStep.jsx     [116 LOC] Step 1. ACTIVE. Critical.
+│       │   ├── ResultsStep.jsx        [182 LOC] Step 3. ACTIVE. HARDCODED STRENGTHS/GAPS.
+│       │   └── SummaryStep.jsx        [~100 LOC] Step 2. ACTIVE.
+│       └── store/
+│           └── assessment.store.js    [34 LOC] Zustand store for wizard state. ACTIVE.
+│
+├── pages/
+│   ├── auth/LoginPage.jsx            [52 LOC] No real auth. Any creds work. DEMO ONLY.
+│   ├── assessment/AssessmentWizardPage.jsx [20 LOC] Thin container delegating to steps. ACTIVE.
+│   ├── certifications/CertificationsPage.jsx [285 LOC] Full certification explorer. ACTIVE but STATIC data.
+│   ├── dashboard/DashboardPage.jsx    [~270 LOC] Main dashboard. ACTIVE. Post-polish.
+│   ├── reports/ReportsPage.jsx        [38 LOC] Dead download buttons. STUB ONLY.
+│   └── settings/SettingsPage.jsx      [51 LOC] All noop. STUB ONLY.
+│
+├── services/
+│   ├── api/
+│   │   ├── assessment.api.js  [11 LOC] Placeholder API. Never called.
+│   │   ├── client.js          [21 LOC] fetch wrapper. Never called.
+│   │   ├── dashboard.api.js   [~12 LOC] Placeholder. Never called.
+│   │   └── uploads.api.js     [~12 LOC] Placeholder. Never called.
+│   ├── auth/
+│   │   └── auth.service.js    [~20 LOC] Placeholder. Never called.
+│   └── mock/
+│       ├── assessment.mock.js  [37 LOC] INIT_ROWS + INIT_FLAGS. Critical starting state.
+│       ├── dashboard.mock.js   [23 LOC] Trend data + UPLOAD_CATEGORIES.
+│       └── uploads.mock.js     [10 LOC] File format config only.
+│
+├── store/
+│   ├── auth.store.js     [~15 LOC] Defines auth state. COMPLETELY UNUSED.
+│   ├── dashboard.store.js [~15 LOC] Defines dashboard state. POSSIBLY UNUSED.
+│   └── ui.store.js        [12 LOC] nav + presentationMode. ACTIVE.
+│
+├── theme/
+│   ├── colors.js      [30 LOC] Color token object. ACTIVE. imported everywhere.
+│   ├── index.js       [~10 LOC] Barrel export.
+│   ├── shadows.js     [~10 LOC] Shadow tokens. Possibly unused (CSS vars used instead).
+│   ├── spacing.js     [~8 LOC] Spacing tokens. Possibly unused (CSS vars used instead).
+│   └── typography.js  [~15 LOC] Font scale tokens. Possibly unused (CSS vars used instead).
+│
+└── utils/
+    ├── chart.utils.jsx   [~30 LOC] Chart helpers. Scope unclear.
+    ├── formatters.js      [~20 LOC] Number/date formatters. Scope unclear.
+    ├── generateInsights.js [~100 LOC] Deterministic insight engine. ACTIVE. New.
+    ├── score.utils.js      [~45 LOC] Score utility functions. Possibly overlaps with calculations/.
+    └── validators.js       [~20 LOC] Input validators. Scope unclear.
+```
+
+---
+
+## 3. PAGE-BY-PAGE ANALYSIS
+
+### LoginPage
+- **Rendered hierarchy:** Ambient glows → Card → Logo + Name → Email/Password inputs → CTA button → Register toggle
+- **Data sources:** Local `useState` for email/pass (pre-filled with `admin@sunrise-hospital.com` / `demo123`)
+- **Stores used:** None
+- **Mock dependencies:** Credentials are pre-filled — any value triggers `onLogin()`
+- **Technical quality:** Adequate for demo. No validation, no error states, no token handling.
+- **Backend readiness:** 10% — visual shell only. Needs JWT/session integration, validation, error handling.
+- **Demo-readiness:** 90% — looks complete. Pre-filled credentials are a good demo touch.
+- **⚠ Risk:** Register mode exists in UI but shows no functional difference from Sign In.
+
+---
+
+### DashboardPage
+- **Rendered hierarchy:**
+  1. ESGProcessingOverlay (1.4s, fades out)
+  2. Header (title + org name)
+  3. **HERO:** ESGScoreCard (count-up) + Compliance badges
+  4. BenchmarkStrip (org vs healthcare avg vs top quartile)
+  5. Risk banner (color-coded)
+  6. ESGAnalystPanel (4 deterministic insights, staggered)
+  7. Priority Actions (hardcoded 3 items + framer hover)
+  8. Insights grid (Environmental E+W+Wt + Governance cards)
+  9. Certifications strip (top 4, hardcoded scores)
+- **Data sources:** `scores` prop from [useAssessmentScoring](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/modules/assessment/hooks/useAssessmentScoring.js#13-50) (real computation)
+- **Stores used:** None directly. Scores are prop-drilled from AppShell.
+- **Mock dependencies:** Actions, cert scores, benchmark data all hardcoded. Org name hardcoded to "Sunrise Multispecialty Hospital".
+- **⚠ Critical issue:** Certification scores on dashboard (`certPreviews`) are **hardcoded constants** that do not reflect the scores in `CERTIFICATIONS` constant or the scoring engine output. They exist independently as magic numbers.
+- **⚠ Critical issue:** The ESGAnalystPanel gets `scores` but does NOT use `scores.water` — it uses a renamed `water` key that must match what [useAssessmentScoring](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/modules/assessment/hooks/useAssessmentScoring.js#13-50) returns. Verify prop names match exactly.
+- **Backend readiness:** 35% — ESG scores are computed, but org context, historical data, and benchmark API all need backend.
+- **Demo-readiness:** 92%
+
+---
+
+### AssessmentWizardPage
+- **Rendered hierarchy:** Thin shell → DataUploadStep (step 1) | SummaryStep (step 2) | ResultsStep (step 3)
+- **DataUploadStep:** Upload category cards (static) → Electricity data table (editable!) → Facility feature toggles → Proceed button
+- **SummaryStep:** Validation summary of uploaded data categories
+- **ResultsStep:** ScoreRing + RadarChart → Cert readiness table → Strengths (hardcoded) → Gaps (hardcoded) → Roadmap (hardcoded) → CTA buttons (dead)
+- **Data sources:** `rows`/`flags` from AppShell state (`useState`, not Zustand store). Props drilled through 3 levels.
+- **⚠ Critical:** `rows`/`flags` are managed in AppShell with `useState` AND in `assessment.store`. **Dual state** — the wizard uses prop-drilled `useState` from AppShell; the Zustand store exists separately and is not the source of truth for the wizard.
+- **⚠ Critical:** ResultsStep strengths, gaps, and roadmap are **fully hardcoded static arrays** with no connection to computed scores.
+- **Backend readiness:** 25%
+- **Demo-readiness:** 80%
+
+---
+
+### CertificationsPage
+- **Rendered hierarchy:** Header + readiness indicator → 8-cert grid (clickable) → Detail panel (requirements checklist + gap count) → Roadmap + All certs table
+- **Data sources:** `CERT_DATABASE` — entirely hardcoded within the file itself (285 lines). Not imported from constants.
+- **⚠ Critical:** CERT_DATABASE inside CertificationsPage is **different data** from `CERTIFICATIONS` in [constants/certifications.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/constants/certifications.js). Two separate datasets for the same concept.
+- **Stores used:** None (local `useState` for `selectedId`)
+- **Backend readiness:** 20% — all cert data is static, but the UI shell is complete.
+- **Demo-readiness:** 95% — most polished page in the application.
+
+---
+
+### ReportsPage
+- **Rendered hierarchy:** Header → 5 report cards (2 Available, 3 Coming Soon)
+- **Dead features:** "Download" buttons on Available reports do nothing (`onClick` missing).
+- **Stores used:** None
+- **Backend readiness:** 5% — pure stub, but structure exists for wiring.
+- **Demo-readiness:** 50% — visible but immediately fails skepticism (button clicks nothing).
+
+---
+
+### SettingsPage
+- **Rendered hierarchy:** Header → 2-column grid → Organization card (inputs) → Preferences card (toggles)
+- **Dead features:** All inputs use `defaultValue` (uncontrolled, never saved). All Toggles have `onChange={() => {}}` noop.
+- **Stores used:** None
+- **Backend readiness:** 10%
+- **Demo-readiness:** 40% — looks present but obviously non-functional.
+
+---
+
+## 4. DASHBOARD INTELLIGENCE MAP
+
+### Exact Dashboard Hierarchy (Post-Polish)
+```
+1. ESGProcessingOverlay (overlay, ~1.4s)
+2. Header — "ESG Status" + Org name (hardcoded)
+3. HERO — ESGScoreCard (dynamic score, count-up) + Cert badges (from CERTIFICATIONS constant)
+4. BenchmarkStrip — org:dynamic, industry avg:61 (STATIC), top quartile:84 (STATIC)
+5. Risk Banner — computed from scores.overall thresholds
+6. ESGAnalystPanel — 4 insights from generateInsights(scores)
+7. Priority Actions — 3 hardcoded action items with hardcoded impact points
+8. Insights Grid — E/W/Wt progress bars (dynamic) + Gov card (partially hardcoded "3/5" and "1 gap")
+9. Certifications Strip — 4 cards with HARDCODED certPreviews array
+```
+
+### All Animations / Microinteractions
+- ESGProcessingOverlay: 3-phase text + progress bar + dot pulse
+- Section stagger: `sectionVariants` with `custom` delay per section (0 → 0.38s)
+- ESGScoreCard: count-up from 0 → score using `setInterval` (900ms)
+- Delta badge: fade-in at 900ms delay
+- ProgressBar: `framer-motion` width 0% → value (600ms easeOut)
+- ESGAnalystPanel insight cards: staggerChildren 0.12s delay
+- Action row hover: `whileHover` background + scale(1.002)
+- Certification card hover: `whileHover` background change
+
+### Insight Generation Flow
+```
+generateInsights(scores) →
+    energy < 60 → "below LEED threshold" [WARNING]
+    energy >= 80 → "above 80pt benchmark" [POSITIVE]
+    gov >= 75 → "exceeds healthcare benchmark" [POSITIVE]
+    gov < 55 → "audit gaps" [WARNING]
+    water < 65 → "unmet ISO 14001 criteria" [WARNING]
+    overall >= 75 → "qualifies for NABH/ISO 14001" [POSITIVE]
+    overall >= 55 → "EMS formalization may unlock ISO 14001" [NEUTRAL]
+→ returns max 4 insights
+```
+
+### Risk Computation Flow
+```
+scores.overall >= 75 → 'low'
+scores.overall >= 55 → 'medium'
+scores.overall >= 35 → 'high'
+else → 'critical'
+```
+Risk label and banner color are derived deterministically from `overall`. No separate risk model.
+
+### Certification Readiness Flow
+**Warning: SPLIT SYSTEM**
+- Dashboard shows `certPreviews` (hardcoded inline in DashboardPage)
+- CertificationsPage shows `CERT_DATABASE` (hardcoded inside CertificationsPage)
+- [constants/certifications.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/constants/certifications.js) has `CERTIFICATIONS` (a third dataset)
+- [useAssessmentScoring](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/modules/assessment/hooks/useAssessmentScoring.js#13-50) computes `lv` (Platinum/Gold/Silver/Bronze) from `overall`
+- These four systems **do not communicate**.
+
+### Hardcoded Data Inventory
+| Location | Data | Impact |
+|---|---|---|
+| DashboardPage:certPreviews | Cert names, scores, gaps, timeline | Shown on dashboard cert strip |
+| DashboardPage:topActions | 3 actions, impact pts, cert names | Priority Actions section |
+| DashboardPage:envScore | Computed inline (not from hook) | Slight duplication |
+| BenchmarkStrip | industry avg 61, top quartile 84 | Benchmark strip |
+| ResultsStep:strengths | 5 hardcoded bullet strings | Strengths card |
+| ResultsStep:gaps | 5 hardcoded bullet strings | Gaps card |
+| ResultsStep:roadmap | 5 hardcoded phase/action/cert items | Roadmap swimlane |
+| CertificationsPage:CERT_DATABASE | 8 certs × 6-8 requirements | Full cert page |
+| constants/certifications.js:CERTIFICATIONS | 6 certs | Dashboard badges, ResultsStep table |
+
+---
+
+## 5. STATE MANAGEMENT AUDIT
+
+### Store Inventory
+
+#### [ui.store.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/store/ui.store.js)
+```
+State: { nav, presentationMode }
+Actions: setNav(), togglePresentation()
+```
+- `nav` is **duplicated** — AppShell also has its own `useState('dashboard')` for `nav`. These are NOT in sync. `ui.store nav` is never consumed. AppShell state is consumed by [handleNav](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/app/AppShell.jsx#26-30).
+- **nav state in Zustand is dead weight** — the component tree uses prop-drilled `nav`/[setNav](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/store/ui.store.js#7-8) from AppShell.
+
+#### [assessment.store.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/modules/assessment/store/assessment.store.js) (in modules/)
+```
+State: { step, rows, flags }
+Actions: setStep/next/back, setRows, updateRow, setFlags, updateFlag, resetAssessment
+```
+- **Dual state problem**: AppShell has its own `useState` for `rows`, `flags`, and `step`. These are the actual sources of truth for the wizard. The Zustand store exists and has the same shape, but wizard steps receive AppShell's `useState` values via props.
+- [useAssessmentFlow](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/modules/assessment/hooks/useAssessmentFlow.js#3-29) hook reads from assessment.store, but wizard navigation uses `onNext`/`onBack` callbacks passed from AppShell (which update AppShell's own `useState`).
+- **Result:** assessment.store is partially connected but effectively orphaned for the actual wizard flow.
+
+#### [auth.store.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/store/auth.store.js)
+```
+State: { user, token, isAuthenticated }
+Actions: login, logout
+```
+- **Completely unused** in the application. AppShell uses its own `useState('login')` for screen state. No component imports [auth.store.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/store/auth.store.js).
+
+#### [dashboard.store.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/store/dashboard.store.js)
+- Likely minimal or placeholder. Not actively consumed in the main dashboard flow.
+
+### State Ownership Issues
+| State | Owner | Issue |
+|---|---|---|
+| nav | AppShell (useState) AND ui.store | DUPLICATE — ui.store.nav is dead |
+| step | AppShell (useState) AND assessment.store | DUPLICATE — store orphaned |
+| rows/flags | AppShell (useState) AND assessment.store | DUPLICATE — store orphaned |
+| auth | auth.store | COMPLETELY UNUSED |
+| presentationMode | ui.store | Correctly owned, correctly consumed |
+
+---
+
+## 6. CALCULATION ENGINE AUDIT
+
+### ESG Scoring (Overall)
+```js
+overall = energy × 0.35 + water × 0.25 + waste × 0.20 + gov × 0.20
+```
+- **Deterministic:** Yes | **Hardcoded:** Weights in constants/scoring.js | **Backend-ready:** Yes (weights configurable)
+- **Quality:** ✅ Enterprise-appropriate weighted average. Weights sum to 1.0.
+
+### Energy Score
+```js
+score += (filledMonths / 12) × 40  // max 40pts for data completeness
+score += renewablePercent > 0 ? 15 : 0  // binary renewable credit
+score += intensity based thresholds → up to 20pts
+score += hasLED ? 10 : hasBMS ? 10 : submetering ? 5
+```
+- **Deterministic:** Yes | **Prototype-grade:** Yes — binary renewable flag (no 0%→100% gradient) is crude.
+- **Issue:** A facility with 0.1% renewable and 99% conventional gets same 15pt bonus as 90% renewable.
+
+### Water Score
+```js
+wTrack×25 + wSplit×15 + hasSTP×20 + rainwater×15 + wAudit×15 + leakage×10 = max 100
+```
+- **Deterministic:** Yes | **Flag-based additive** | **Enterprise-grade:** No — boolean flags lose measurement granularity.
+
+### Waste Score
+```js
+wtTrack×20 + segregation×30 + authVendor×25 + recycling×15 + wtAudit×10 = max 100
+```
+- Same pattern as water. Same limitations.
+
+### Governance Score
+```js
+policy×25 + esgOwner×20 + monthlyRev×15 + sops×15 + audits×15 + compliance×10 = max 100
+```
+- Same pattern. **`compliance` flag exists in scoring but missing from DataUploadStep's FACILITY_FIELDS** — it's never shown to the user as a toggle, meaning governance is permanently capped at 90.
+
+### Emissions
+| Calculation | Formula | Issue |
+|---|---|---|
+| Scope 1 | diesel × 2.68 / 1000 | Hardcoded GHG factor. India diesel: ~2.68 tCO₂e/kL. Reasonable. |
+| Scope 2 | electricity × 0.82 / 1000 | Hardcoded India grid factor (CEA 2023). Valid but region-specific, not configurable. |
+| Scope 3 | scope2 × 0.12 | **Completely fabricated.** Not GHG Protocol compliant. Scope3 is a flat 12% proxy of Scope2. |
+
+### Certification Level (Platinum/Gold/Silver/Bronze)
+- Derived from `overall` score thresholds. **Does not correspond to any real certification.**
+- Used as a visual gamification layer only. Not connected to NABH/LEED/ISO scores.
+
+### Action Generation
+- **Fully hardcoded** in DashboardPage and ResultsStep. Not computed from gaps or scores.
+
+### Insight Generation (generateInsights.js)
+- Deterministic rule-based. Quality: Good for demo. Missing: water is called `water` but the key returned from [useAssessmentScoring](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/modules/assessment/hooks/useAssessmentScoring.js#13-50) is also `water` — name alignment confirmed.
+
+---
+
+## 7. COMPONENT SYSTEM AUDIT
+
+### Component Reuse Quality
+- **ProgressBar:** Excellent reuse — used across dashboard, certifications, assessment results.
+- **ScoreRing:** Good — used in dashboard hero and ResultsStep.
+- **Button:** Good — used in wizard navigation.
+- **Toggle:** Good — used in DataUploadStep and SettingsPage.
+
+### Dead / Possibly Unused Components
+| Component | Evidence |
+|---|---|
+| [GlassCard.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/cards/GlassCard.jsx) | No import found in active pages |
+| [MetricCard.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/cards/MetricCard.jsx) | No import found in active pages |
+| [StatusCard.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/cards/StatusCard.jsx) | Imports ProgressBar but not called from active pages |
+| [EmissionsChart.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/charts/EmissionsChart.jsx) | Not on dashboard, may be in wizard |
+| [TrendAreaChart.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/charts/TrendAreaChart.jsx) | Not rendered anywhere visible |
+| [ReadinessGauge.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/charts/ReadinessGauge.jsx) | Not rendered anywhere visible |
+| [DataTable.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/tables/DataTable.jsx) | No clear usage |
+| [MetricsTable.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/tables/MetricsTable.jsx) | No clear usage |
+| [EmptyState.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/feedback/EmptyState.jsx) | No clear trigger state |
+| [LoadingScreen.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/feedback/LoadingScreen.jsx) | No async operations exist |
+| [Modal.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/ui/Modal.jsx) | No modals in UI |
+| [Input.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/ui/Input.jsx) | Direct `<input className="input">` used instead |
+| [Tooltip.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/ui/Tooltip.jsx) | Not visibly in use |
+| [useDebounce.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/hooks/useDebounce.js) | Not consumed |
+| [useModal.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/hooks/useModal.js) | Not consumed |
+| [useResponsive.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/hooks/useResponsive.js) | Not consumed |
+| [routes.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/constants/routes.js) | No React Router — completely dead |
+
+### Top 10 Critical UI Components
+1. [ESGScoreCard.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/cards/ESGScoreCard.jsx) — Dashboard hero, count-up
+2. [ScoreRing.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/indicators/ScoreRing.jsx) — Visual centrepiece
+3. [DashboardLayout.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/layouts/DashboardLayout/DashboardLayout.jsx) — Frame entire app
+4. [ProgressBar.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/indicators/ProgressBar.jsx) — Used everywhere
+5. [ESGProcessingOverlay.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/feedback/ESGProcessingOverlay.jsx) — Demo experience gate
+6. [ESGAnalystPanel.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/intelligence/ESGAnalystPanel.jsx) — Intelligence perception
+7. [BenchmarkStrip.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/intelligence/BenchmarkStrip.jsx) — Benchmark positioning
+8. [DataUploadStep.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/modules/assessment/steps/DataUploadStep.jsx) — Only real data input
+9. [useAssessmentScoring.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/modules/assessment/hooks/useAssessmentScoring.js) — Entire score derivation
+10. [AppShell.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/app/AppShell.jsx) — All routing, state coordination
+
+### Top 10 Highest Technical Debt
+1. [assessment.store.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/modules/assessment/store/assessment.store.js) — Defined but not the source of truth (prop-drilled instead)
+2. [auth.store.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/store/auth.store.js) — Completely unused
+3. `ui.store.js:nav` — Duplicate of AppShell useState
+4. [ResultsStep.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/modules/assessment/steps/ResultsStep.jsx) — Hardcoded strengths/gaps/roadmap
+5. [constants/certifications.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/constants/certifications.js) + CertificationsPage:CERT_DATABASE — Dual cert datasets
+6. `DashboardPage:certPreviews` — Third cert dataset, hardcoded
+7. [calculateScope3.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/calculations/emissions/calculateScope3.js) — Fake 12% proxy
+8. [calculateReadiness.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/calculations/scoring/calculateReadiness.js) — Misleading filename (contains Water/Waste/Gov scorers)
+9. [calculateEnergyScore.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/calculations/energy/calculateEnergyScore.js) — Binary renewable flag (no gradient)
+10. [routes.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/constants/routes.js) — Dead file (react-router unused)
+
+---
+
+## 8. DESIGN SYSTEM AUDIT
+
+### Spacing Token Consistency
+- `--sp-1` through `--sp-12` defined in CSS vars (8px grid). **Note: `--sp-7` and `--sp-8` are both `32px` — redundant duplicate.**
+- JS [spacing.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/theme/spacing.js) in theme/ defines the same values in JS but is likely never imported (CSS vars used instead). **Dead file.**
+- DataUploadStep uses direct style `style={{ maxWidth: 900, margin: '0 auto' }}` — magic number.
+
+### Typography Consistency
+- Good CSS class system (`t-micro`, `t-small`, `t-body`, `t-heading` etc.)
+- Some inline `fontSize` overrides in components (ESGScoreCard: `fontSize: 48`, StatusBadge inline sizes)
+
+### CSS Variable Integrity
+- All core color tokens defined in both CSS vars AND [theme/colors.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/theme/colors.js) — **dual-definition system**. Components import `C` from colors.js and use inline styles instead of CSS vars. This is an intentional pattern but creates 2 sources of truth.
+
+### Inline Style Usage (Technical Debt)
+Extensive inline styles throughout — not a problem per se given the custom design system, but creates refactor friction:
+- DashboardPage: 20+ inline style blocks
+- CertificationsPage: 15+ inline style blocks
+- ResultsStep: 25+ inline style blocks
+
+### Conflicting CSS Definitions
+- `.progress-fill` has `transition: width 0.4s var(--ease)` in CSS AND Framer Motion also controls width. The CSS transition and Framer Motion width animation may conflict on the same element. `overflow: hidden` on `.progress-track` mitigates visual issue.
+
+### Missing Utility Classes
+- No `.gap-7` or `.gap-8` (gap-6 is max)
+- No responsive breakpoints (`@media` queries) anywhere in CSS
+- No dark-mode toggle support (CSS has no light mode)
+
+---
+
+## 9. BACKEND READINESS AUDIT
+
+### Frontend Assumptions Requiring Backend
+| Assumption | Required Backend Logic |
+|---|---|
+| Org name is hardcoded | User → Organization entity in DB |
+| Any credentials log in | Auth service (JWT/OAuth) |
+| Scores computed frontend | Scoring API or persist computed results |
+| Cert data is static | Certification standards DB |
+| Actions are hardcoded | Recommendation engine or rules DB |
+| Benchmarks are hardcoded | Industry benchmark dataset |
+| No data persistence | Assessment save/load API |
+| No history | Time-series score storage |
+| Download reports are dead | PDF generation service |
+| Scope 3 is 12% of Scope 2 | Real Scope 3 category tracking |
+
+### Required API Endpoints
+
+#### Authentication
+```
+POST /api/auth/login        { email, password } → { token, user }
+POST /api/auth/logout
+GET  /api/auth/me           → { id, name, orgId, role }
+```
+
+#### Organization
+```
+GET  /api/org               → { name, sector, fiscalYear, area }
+PUT  /api/org               Update org profile
+```
+
+#### Assessments
+```
+POST /api/assessments       { rows, flags, orgId } → { id, scores }
+GET  /api/assessments/:id   → { id, rows, flags, scores, createdAt }
+GET  /api/assessments       → [list of past assessments]
+PUT  /api/assessments/:id   Reopen and update
+```
+
+#### Scores
+```
+GET  /api/scores/latest     → computed scores object
+GET  /api/scores/history    → [{ date, overall, energy, water, waste, gov }]
+```
+
+#### Certifications
+```
+GET  /api/certifications        → [{ id, name, requirements, scoring }]
+GET  /api/certifications/readiness/:orgId → [{ certId, score, gaps }]
+```
+
+#### Benchmarks
+```
+GET  /api/benchmarks/:sector  → { avg, topQuartile, topDecile }
+```
+
+#### Reports
+```
+POST /api/reports/generate   { type, assessmentId } → { url }
+GET  /api/reports/:id/download
+```
+
+### Backend Module Architecture (Recommended)
+```
+backend/
+├── auth/           (JWT, sessions, roles)
+├── organization/   (CRUD, sector lookup)
+├── assessment/     (data ingestion, validation)
+├── scoring/        (server-side calculation — mirrors frontend)
+├── certification/  (standards DB, readiness computation)
+├── benchmarks/     (industry data store)
+├── insights/       (rule-based insight generator, server-side)
+├── reports/        (PDF generation, GRI/BRSR templates)
+└── emissions/      (Scope 1/2/3 per GHG Protocol)
+```
+
+### Integration Complexity Classification
+| Integration | Complexity | Risk |
+|---|---|---|
+| Auth (JWT) | Medium | Low — standard pattern |
+| Assessment save/load | Easy | Low — CRUD |
+| Server-side scoring | Medium | Medium — must match frontend exactly |
+| Certification readiness | Medium | Low — rule evaluation |
+| History/trend data | Medium | Low — time-series CRUD |
+| Real benchmarks | Hard | High — requires sourced dataset |
+| PDF report generation | Hard | Medium — puppeteer/iText |
+| Real Scope 3 tracking | Very Hard | High — GHG Protocol complexity |
+| Multi-org / multi-user | Hard | High — permissions model |
+
+---
+
+## 10. MOCK DATA DEPENDENCY AUDIT
+
+### All Mock Files
+| File | Contents | Status |
+|---|---|---|
+| [assessment.mock.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/services/mock/assessment.mock.js) | 12-month energy data, 20 feature flags | Must become dynamic (user-provided) |
+| [dashboard.mock.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/services/mock/dashboard.mock.js) | Trend baseline [52..current], upload categories | Trend must be historical DB data |
+| [uploads.mock.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/services/mock/uploads.mock.js) | File format config only | Can remain |
+
+### Hardcoded Metrics (Full List)
+| Location | Value | Should Be |
+|---|---|---|
+| [BenchmarkStrip](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/intelligence/BenchmarkStrip.jsx#19-97) | industryAvg: 61, topQuartile: 84 | API: /benchmarks/healthcare |
+| [DashboardPage](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/pages/dashboard/DashboardPage.jsx#21-267) | Org name "Sunrise Multispecialty Hospital" | User profile |
+| `DashboardPage:topActions` | 3 static actions | Computed from score gaps |
+| `DashboardPage:certPreviews` | 4 certs with fixed scores | Computed from cert engine |
+| `DashboardPage:envScore` | `energy×0.45 + water×0.30 + waste×0.25` | Should use SCORING_WEIGHTS |
+| `ResultsStep:strengths` | 5 hardcoded strings | Derived from scores |
+| `ResultsStep:gaps` | 5 hardcoded strings | Derived from cert requirement gaps |
+| `ResultsStep:roadmap` | 5 hardcoded phase/action rows | Derived from priority actions |
+| [CertificationsPage](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/pages/certifications/CertificationsPage.jsx#121-285) | 8 certs with full requirement sets | Certification standards DB |
+| [calculateScope3](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/calculations/emissions/calculateScope3.js#1-9) | scope2 × 0.12 | Actual Scope 3 category inputs |
+| [calculateScope2](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/calculations/emissions/calculateScope2.js#1-9) | factor 0.82 | Region-specific configurable factor |
+| [determineCertificationLevel](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/calculations/scoring/determineCertificationLevel.js#1-18) | Platinum ≥75, Gold ≥60 | Configurable thresholds |
+
+### What Must Go Dynamic First (Priority Order)
+1. Organization context (org name, sector, fiscal year) — lowest effort, high demo value
+2. Assessment persistence (save/load last assessment) — enables multi-session
+3. Historical scores (trend data) — narrative continuity
+4. Real certification readiness (computed from score gaps) — consistency
+5. Priority actions (derived from gaps) — most impactful demo claim
+
+### What Can Stay Mocked for Demo
+- Industry benchmarks (hardcode is fine for demo)
+- Scope 3 estimation (12% proxy is defensible for now)
+- Report download (visible button, dead)
+- Settings preferences (UI completeness only)
+
+---
+
+## 11. PERFORMANCE & STABILITY AUDIT
+
+### Bundle Size
+```
+dist/assets/index.js: 694 KB (minified), 206 KB gzipped
+```
+**This is borderline large for an SPA.** Primary contributors:
+1. **Recharts (~350 KB raw)** — 3 of 4 charts are unused on main dashboard
+2. **Framer Motion (~150 KB raw)** — justified by animation quality
+3. React + React DOM + Zustand: ~45 KB
+
+**Optimization opportunity:** Dynamic import (`React.lazy`) Recharts-heavy components. Could reduce initial JS by ~30-40%.
+
+### Unnecessary Renders
+- [useAssessmentScoring](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/modules/assessment/hooks/useAssessmentScoring.js#13-50) uses `useMemo([rows, flags])` — correctly memoized
+- DashboardPage re-renders once when `ready` state changes (overlay completes) — acceptable
+- [AppShell.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/app/AppShell.jsx) re-renders when any state changes, triggering all child rerenders — mild concern but typical SPA pattern
+
+### Animation Performance Risks
+- `framer-motion` `whileHover` on every action row and cert card — fine at current scale (<10 items)
+- ESGScoreCard count-up uses `setInterval` (not RAF) — acceptable for 900ms, but could be smoother using `requestAnimationFrame`
+- CSS `.progress-fill` transition AND Framer Motion on same element — potential double-animation conflict
+
+### Memory Risks
+- No `useEffect` cleanup issues visible
+- ESGProcessingOverlay: two `setTimeout` calls with `clearTimeout` cleanup — correct
+
+### Responsive Design
+- **App is NOT responsive.** No `@media` queries exist in CSS. Sidebar is 60px fixed. Grid layout (grid-4, grid-2) will break on tablet/mobile.
+- [useResponsive.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/hooks/useResponsive.js) hook exists but is never used.
+- Presentation Mode partially addresses projector use case but doesn't handle small screens.
+
+### Accessibility Gaps
+- No `aria-*` attributes on interactive elements
+- Sidebar buttons have `title` attributes — minimum acceptable
+- No keyboard navigation support beyond basic HTML
+- No focus ring styling
+- No ARIA roles on score rings or progress bars
+- Contrast ratios may be inadequate for WCAG AA compliance (muted color palette)
+
+---
+
+## 12. HACKATHON READINESS SCORECARD
+
+| Dimension | Grade | Notes |
+|---|---|---|
+| UI / UX | **A** | Premium enterprise aesthetic, smooth interactions |
+| Architecture | **B-** | Good structure, significant state duplication |
+| Product Differentiation | **A-** | ESG + Healthcare niche is compelling |
+| Technical Depth | **B** | Real scoring engine; fake emissions, hardcoded cert data |
+| Backend Readiness | **D+** | Placeholders exist but nothing is wired |
+| Scalability Perception | **B+** | Modular structure creates credible story |
+| Demo Quality | **A** | ProcessingOverlay + count-up + stagger = executive impact |
+| Enterprise Credibility | **B+** | Visual language is correct; static data breaks trust under scrutiny |
+| Innovation Perception | **B+** | Deterministic insight engine is smart and defensible |
+
+### Top 5 Strengths
+1. **Visual design language** — "Bloomberg terminal meets enterprise SaaS" is achieved
+2. **Real calculation engine** — scoring is genuinely computed, not random
+3. **Modular codebase** — clear separation across calculations/, modules/, services/
+4. **Demo orchestration** — ProcessingOverlay creates perceived intelligence
+5. **Certification depth** — CertificationsPage is the most feature-complete page and will impress judges
+
+### Top 5 Remaining Weaknesses
+1. **Hardcoded cert/action/insight data** — breaks immediately under demo scrutiny if questioned
+2. **Dual state management** — assessment.store and AppShell useState do the same thing
+3. **No data persistence** — refresh resets to mock defaults, which is visible
+4. **Dead navigation/Settings/Reports** — judges who click settings or try to download see nothing happening
+5. **Scope 3 is a fake 12% proxy** — a sustainability-literate judge will challenge this
+
+### Top 5 Highest ROI Next Steps
+1. **Wire organization profile to a simple backend** — replace hardcoded org name, store assessment on submit (~4hr)
+2. **Connect cert readiness to score gaps** — eliminate certPreviews hardcoded array, derive from scoring (~3hr)
+3. **Make ResultsStep dynamic** — generate strengths/gaps from actual flag values (~2hr)
+4. **Add basic auth** — JWT or session-backed login screen (~4hr)
+5. **Dynamic code-split Recharts** — reduce initial bundle by ~30% using React.lazy (~1hr)
+
+---
+
+## 13. FINAL ENGINEERING VERDICT
+
+### Is the frontend architecture stable enough to stop redesigning?
+**Yes, with conditions.** The visual hierarchy, design system, and component layout are solid and should not be touched. However, **state management must be unified** before scaling. The dual-state problem (Zustand stores + AppShell useState) will cause bugs as complexity grows.
+
+### Is backend integration safe to begin?
+**Conditionally yes.** The API client ([client.js](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/services/api/client.js)) and API service files are already placeholder-ready with the correct interface. The scoring engine can be ported to a backend 1:1. Start with: auth → org profile → assessment save → score history. **Do not touch the frontend calculation engine** until the backend ports are verified equivalent.
+
+### What parts are production-grade?
+- CSS design system (index.css) — production-quality
+- Calculation engine (energy/water/waste/governance/emails) — production-quality with minor improvements
+- [useAssessmentScoring](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/modules/assessment/hooks/useAssessmentScoring.js#13-50) hook — clean, memoized, correct
+- `SCORING_WEIGHTS` and `CERTIFICATION_THRESHOLDS` in constants — production-ready
+- [ESGProcessingOverlay](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/feedback/ESGProcessingOverlay.jsx#11-103) — production-grade UX
+- [ProgressBar](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/indicators/ProgressBar.jsx#3-26), `ScoreRing`, [ESGScoreCard](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/cards/ESGScoreCard.jsx#34-66) with animation — production-grade
+
+### What parts are still prototype-grade?
+- Scope 3 calculation (12% proxy) — prototype
+- All hardcoded actions, strengths, gaps, cert scores — prototype
+- Auth (any credentials accepted) — prototype
+- Settings (all noop) — prototype
+- Reports (dead downloads) — prototype
+- Trend data (static array) — prototype
+- Benchmark data (static constants) — prototype
+
+### What could fail during demo?
+1. Judge clicks "Download" on Reports → nothing happens
+2. Judge edits Settings → all changes lost on nav away (uncontrolled inputs)
+3. Judge asks "what happens if I'm in a different sector?" → org name is hardcoded to hospital
+4. Judge refreshes browser → all assessment data resets to mock
+5. Judge asks how Scope 3 is calculated → 12% proxy will not satisfy a sustainability expert
+6. Judge clicks "Book Expert Consultation" button in ResultsStep → dead
+
+### What should absolutely NOT be changed?
+1. **Dashboard hierarchy** — Score → Risk → Intelligence → Actions → Insights → Certifications
+2. **index.css design system** — changing token names will break all components
+3. **SCORING_WEIGHTS** — any change ripples through all computed scores
+4. **useAssessmentScoring** — any interface change breaks dashboard, wizard, and summary pages simultaneously
+5. **ESGProcessingOverlay timing** — current 1.4s is calibrated correctly for demo pacing
+
+---
+*End of Audit — This document reflects the real state of the codebase as of Post-Polish Phase, 2026-05-09.*

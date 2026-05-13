@@ -1,0 +1,400 @@
+# ESG UI/UX Elite Redesign — Complete Audit & Implementation Plan
+
+## Executive Summary
+This document provides a complete UI/UX audit, identifies prioritized problems, proposes a redesigned architecture targeting enterprise-grade quality, and delivers a page-by-page implementation roadmap. The goal: **Bloomberg-level ESG intelligence UI that wins a hackathon.**
+
+---
+
+## STEP 1 — UI Inventory Tree
+
+```
+src/
+├── main.jsx                          ← Entry point
+├── app/
+│   ├── AppShell.jsx                  ← Root shell (auth + nav routing)
+│   ├── providers/
+│   │   ├── QueryProvider.jsx         ← Stub (pass-through)
+│   │   ├── StoreProvider.jsx         ← Stub (pass-through)
+│   │   └── ThemeProvider.jsx         ← Stub (pass-through)
+│   └── router/
+│       ├── AppRouter.jsx             ← Stub (state-based routing doc)
+│       ├── ProtectedRoute.jsx        ← Auth guard
+│       └── routes.config.js          ← Route definitions
+├── pages/                            ← 6 Page containers
+│   ├── auth/LoginPage.jsx            ← Login/Register (83 LOC)
+│   ├── auth/RegisterPage.jsx         ← Standalone register (64 LOC)
+│   ├── dashboard/DashboardPage.jsx   ← Main overview (73 LOC)
+│   ├── assessment/AssessmentWizardPage.jsx ← 3-step wizard (20 LOC)
+│   ├── certifications/CertificationsPage.jsx ← EMPTY STUB
+│   ├── reports/ReportsPage.jsx       ← EMPTY STUB
+│   └── settings/SettingsPage.jsx     ← EMPTY STUB
+├── layouts/
+│   ├── AuthLayout/AuthLayout.jsx     ← Auth wrapper (stub)
+│   └── DashboardLayout/
+│       ├── DashboardLayout.jsx       ← Sidebar + content (25 LOC)
+│       ├── Sidebar.jsx               ← Icon nav (68 LOC)
+│       ├── Topbar.jsx                ← Wizard step bar (46 LOC)
+│       └── NavigationItem.jsx        ← Nav button (24 LOC)
+├── components/                       ← 23 shared UI components
+│   ├── cards/          (5) ESGScoreCard, StatusCard, MetricCard, GlassCard, CertificationCard
+│   ├── charts/         (4) TrendAreaChart, EmissionsChart, ESGRadarChart, ReadinessGauge
+│   ├── indicators/     (4) ScoreRing, ProgressBar, StatusBadge, RiskIndicator
+│   ├── feedback/       (3) ValidationAlert, EmptyState, LoadingScreen
+│   ├── tables/         (2) DataTable, MetricsTable
+│   └── ui/             (5) Button, Input, Modal, Toggle, Tooltip
+├── modules/assessment/               ← Domain feature module
+│   ├── components/     (4) AssessmentStep, ModuleSection, UploadCard, ValidationPanel
+│   ├── configs/        (4) energy.module.jsx, governance.module.js, waste.module.js, water.module.js
+│   ├── hooks/          (3) useAssessmentFlow, useAssessmentScoring, useModuleValidation
+│   ├── services/       (2) assessment.service.js, uploads.service.js
+│   ├── steps/          (3) DataUploadStep (139 LOC), SummaryStep (149 LOC), ResultsStep (195 LOC)
+│   └── store/              assessment.store.js (Zustand)
+├── calculations/                     ← Pure math engine
+│   ├── emissions/      (4) calculateScope1/2/3, calculateTotalEmissions
+│   ├── energy/         (3) calculateEnergyScore, calculateIntensity, calculateRenewableShare
+│   └── scoring/        (3) calculateOverallScore, calculateReadiness, determineCertificationLevel
+├── services/
+│   ├── api/            (3) client.js, assessment.api.js, dashboard.api.js, uploads.api.js
+│   ├── auth/           (1) auth.service.js
+│   └── mock/           (3) assessment.mock.js, dashboard.mock.js, uploads.mock.js
+├── store/              (3) auth.store.js, dashboard.store.js, ui.store.js
+├── hooks/              (3) useDebounce.js, useModal.js, useResponsive.js
+├── constants/          (3) certifications.js, routes.js, scoring.js
+├── config/             (2) app.config.js, charts.config.js
+├── theme/              (5) colors.js, index.js, shadows.js, spacing.js, typography.js
+└── utils/              (4) chart.utils.jsx, formatters.js, score.utils.js, validators.js
+```
+
+**Totals:** 6 pages, 23 shared components, 4 module components, 4 charts, 5 card types, 10 pure calculation functions, 3 Zustand stores.
+
+---
+
+## STEP 2 — UI/UX Audit Report
+
+### 2.1 Information Hierarchy — ⚠️ MODERATE
+
+| Criterion | Status | Finding |
+|---|---|---|
+| ESG score immediately visible? | ✅ Yes | [ESGScoreCard](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/cards/ESGScoreCard.jsx#6-34) is first card on dashboard |
+| Status comprehensible in <5s? | ⚠️ Partial | Score is visible, but **no risk level indicator** and **no trend delta** shown at glance |
+| Certification readiness surfaced? | ❌ No | [CertificationsPage](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/pages/certifications/CertificationsPage.jsx#4-13) is an **empty stub** ("Coming Soon"). Readiness data only appears at wizard Step 3, not accessible from dashboard |
+
+### 2.2 Cognitive Load — ⚠️ HIGH
+
+| Problem | Severity | Location |
+|---|---|---|
+| Dashboard has 3 grid rows with 12 total elements in 73 LOC — dense but flat | Medium | [DashboardPage.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/pages/dashboard/DashboardPage.jsx) |
+| No visual grouping or section headers on dashboard | High | Dashboard renders cards without semantic groupings |
+| Inline style objects everywhere (500+ inline style declarations across codebase) | High | Every component |
+| [SummaryStep.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/modules/assessment/steps/SummaryStep.jsx) is 149 LOC single render with 5 sections, no section components | High | Assessment Step 2 |
+| [ResultsStep.jsx](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/modules/assessment/steps/ResultsStep.jsx) is 195 LOC single render — the densest file | Critical | Assessment Step 3 |
+
+### 2.3 Decision Intelligence — ❌ MAJOR GAPS
+
+The UI currently answers only 2 of 5 critical decision questions:
+
+| Question | Answered? | Evidence |
+|---|---|---|
+| What is our ESG status? | ✅ Yes | Overall score + category scores on dashboard |
+| Why is this score the way it is? | ⚠️ Partially | Category breakdown exists, but no **driver attribution** (what specific inputs caused the score) |
+| What is the risk? | ❌ No | `RiskIndicator` component exists but is **never used** anywhere |
+| What should we fix first? | ⚠️ Partially | Roadmap exists in Step 3, but is **hardcoded** (not computed from actual gaps) |
+| What certifications can we achieve? | ⚠️ Partially | Cert table in Step 3, but **CertificationsPage is empty**. No gap detail or missing-requirements breakdown |
+
+### 2.4 Enterprise Trust Signal — ⚠️ NEEDS WORK
+
+| Dimension | Grade | Comment |
+|---|---|---|
+| Typography | C+ | `system-ui,sans-serif` used everywhere. No heading hierarchy enforcement. `fontSize` values range from 10-26px with no scale system |
+| Spacing | C | Raw pixel values (4, 8, 10, 12, 14, 16, 20, 22, 28, 40) used ad-hoc despite `spacing.js` existing |
+| Color discipline | B- | Token system exists (`C.green`, `C.amber`) but `#00ff88` neon green is **too vibrant** for enterprise — reads as "gaming dashboard" not "Bloomberg terminal" |
+| Card system | B | Consistent `borderRadius: 16, border: 1px solid` pattern, but no elevation/shadow hierarchy |
+| Layout consistency | C+ | `maxWidth` varies (900 vs 1000 vs none). Padding inconsistent (22 vs 28 vs 40) |
+
+**Verdict:** Feels like a polished **startup MVP**, not enterprise SaaS. The neon-green-on-black palette is visually striking but undermines institutional credibility.
+
+### 2.5 Data Storytelling Flow — ❌ BROKEN
+
+The ideal flow is: **Status → Diagnosis → Impact → Action → Outcome**
+
+| Stage | Present? | Location |
+|---|---|---|
+| Status | ✅ | Dashboard score + categories |
+| Diagnosis | ⚠️ Partial | Only in wizard Step 3 (strengths/gaps), and those are **hardcoded strings** |
+| Impact | ❌ Missing | No "so what" layer — no monetary cost, no compliance risk quantification |
+| Action | ⚠️ Partial | Roadmap in Step 3, but hardcoded and not prioritized by impact |
+| Outcome | ❌ Missing | No "expected improvement" projections |
+
+---
+
+## STEP 3 — Redesigned UI Architecture
+
+### 🟩 Layer 1: ESG Command Center (Dashboard Top)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  ESG SCORE (72)    │  12-Month Trend ▲  │  Risk: MODERATE  │ Cert │
+│  ScoreRing + Badge │  TrendAreaChart    │  RiskIndicator    │ 3/8  │
+│  ↕ vs last quarter │  with delta label  │  (newly wired)    │ready │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Changes required:**
+- Add **risk level** computation based on score thresholds to dashboard
+- Add **trend delta** ("↑ 4 pts from last quarter") to ESGScoreCard
+- Add **certification readiness count** ("3 of 8 eligible") as a quick stat
+
+---
+
+### 🟦 Layer 2: ESG Triad (E/S/G Pillars)
+
+```
+┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐
+│ ENVIRONMENTAL    │ │ SOCIAL           │ │ GOVERNANCE       │
+│ Score: 68 ▲+5    │ │ Score: — (N/A)   │ │ Score: 75 ▲+2    │
+│ Key: Energy 71,  │ │ Planned          │ │ Key: Policy ✓    │
+│ Water 65, Waste  │ │ Future module    │ │ Owner ✓, Audits ✓│
+│ 62               │ │                  │ │                  │
+│ Risk: ●Low       │ │ Risk: ●Unknown   │ │ Risk: ●Low       │
+└──────────────────┘ └──────────────────┘ └──────────────────┘
+```
+
+**Changes required:**
+- Create new `ESGTriadCard` component grouping Environmental sub-scores (energy + water + waste)
+- Governance already tracked; Social is a future module placeholder
+
+---
+
+### 🟨 Layer 3: Emissions Intelligence
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ EMISSIONS OVERVIEW                              Total: 82 tCO₂e│
+│ ┌───────┐ ┌───────┐ ┌───────┐   │  Intensity │  Trend Chart  │
+│ │Scope 1│ │Scope 2│ │Scope 3│   │ 0.008/sqft │  (new)        │
+│ │ 12.4  │ │ 58.2  │ │  6.9  │   │            │               │
+│ └───────┘ └───────┘ └───────┘   │            │               │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Changes required:**
+- Enhance [EmissionsChart](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/charts/EmissionsChart.jsx#3-28) with a bar/stacked visualization instead of text-only
+- Add emissions intensity KPI alongside scope breakdown
+- Add trend sparkline
+
+---
+
+### 🟥 Layer 4: Certification Readiness Engine
+
+**This is the most impactful missing feature.** Currently [CertificationsPage](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/pages/certifications/CertificationsPage.jsx#4-13) is an empty stub.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ CERTIFICATION READINESS ENGINE                                  │
+│ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐             │
+│ │ IGBC  74%    │ │ LEED  68%    │ │ ISO14001 76% │  ...        │
+│ │ ████████░░░  │ │ ██████░░░░░  │ │ █████████░░  │             │
+│ │ Eligible ✓   │ │ Gaps: 4      │ │ Ready ✓      │             │
+│ │ Missing: 2   │ │ Timeline: 18m│ │ Timeline: 6m │             │
+│ └──────────────┘ └──────────────┘ └──────────────┘             │
+│                                                                 │
+│ Selected: IGBC Healthcare                                       │
+│ ┌─ Requirements ──────────────────────────────────────────────┐ │
+│ │ ✓ Energy monitoring     ✗ Renewable >10%    ✗ IAQ system   │ │
+│ │ ✓ Water tracking        ✓ Waste segregation  ✗ EMS formal  │ │
+│ └─────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Changes required:**
+- **Build the full [CertificationsPage](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/pages/certifications/CertificationsPage.jsx#4-13)** with cert cards, gap analysis, and roadmap
+- Create `CertificationDetailCard` component
+- Create `RequirementsChecklist` component
+- Map certification requirements to actual assessment flags/scores
+
+---
+
+### 🟪 Layer 5: ESG Action Intelligence
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ PRIORITY ACTIONS                                    Impact ▼    │
+│ 1. Install rooftop solar ─── Energy +12 pts ─── IGBC, GRI ─ H │
+│ 2. Deploy BMS/monitoring ── Energy + 8 pts ─── ISO 50001 ── H  │
+│ 3. Formalize EMS ────────── Gov.   + 5 pts ─── ISO 14001 ── M  │
+│ 4. Increase LED coverage ── Energy + 4 pts ─── IGBC, LEED ─ M  │
+│ 5. Start Scope 3 tracking ─ Emiss. + 3 pts ─── GRI, CDP ─── L  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Changes required:**
+- Compute actions dynamically from gap analysis (replace hardcoded `roadmap[]` array)
+- Create `ActionItem` component with impact score and certification linkage
+
+---
+
+## STEP 4 — Design System Enforcement
+
+### Spacing System (8px base)
+
+| Token | Value | Usage |
+|---|---|---|
+| `xs` | 4px | Icon gaps, badge padding |
+| `sm` | 8px | Inline element spacing |
+| [md](file:///C:/Users/Shalvin/.gemini/antigravity/brain/5f43237c-388c-45d7-a540-bc500d35d2ea/task.md) | 16px | Card internal padding, grid gaps |
+| `lg` | 24px | Section spacing |
+| `xl` | 32px | Page padding |
+| `xxl` | 48px | Major section dividers |
+
+### Typography Scale
+
+| Token | Size | Weight | Use |
+|---|---|---|---|
+| `display` | 28px | 800 | Page titles (H1) |
+| `heading` | 20px | 700 | Section headers (H2) |
+| `subheading` | 16px | 600 | Card titles (H3) |
+| `body` | 14px | 400 | Body text |
+| `caption` | 12px | 500 | Labels, metadata |
+| `micro` | 10px | 600 | Badges, overline text |
+
+### Enterprise Color Palette (Muted Refinement)
+
+Replace the current neon palette with enterprise-muted tones:
+
+| Current | Proposed | Token |
+|---|---|---|
+| `#00ff88` (neon green) | `#34d399` (emerald-400) | `primary` |
+| `#060c11` (pure black) | `#0f172a` (slate-900) | `bg` |
+| `rgba(255,255,255,0.038)` | `rgba(255,255,255,0.05)` | `surface` |
+| `#fbbf24` (amber) | `#f59e0b` (amber-500) | `warning` |
+| `#f87171` (rose) | `#ef4444` (red-500) | `danger` |
+| `#a78bfa` (violet) | `#8b5cf6` (violet-500) | `accent` |
+| `#38bdf8` (sky blue) | `#3b82f6` (blue-500) | `info` |
+
+### Card System Rules
+- All cards: `border-radius: 12px`, `border: 1px solid var(--border)`, `padding: 20px`
+- Highlight cards (score): additional `border-color: var(--primary-dim)`
+- No shadows by default; `shadow-sm` only on hover/interactive cards
+- Section label always: `micro` size, `uppercase`, `letter-spacing: 1px`
+
+### Chart Rules
+- Maximum 1 chart per card
+- Every chart must have a clear title label
+- Prefer area/line charts for trends, bar charts for comparisons, radar for multi-dimensional
+- No pie charts (low data-ink ratio)
+
+---
+
+## STEP 5 — Component & Folder Restructure Plan
+
+### New Components to Create
+
+| Component | Purpose | Location |
+|---|---|---|
+| `ESGTriadCard` | E/S/G pillar card with sub-scores | `components/cards/` |
+| `CertificationDetailCard` | Individual cert with progress + gaps | `components/cards/` |
+| `RequirementsChecklist` | Check/uncheck requirements mapping | `components/indicators/` |
+| `ActionItem` | Prioritized action with impact score | `components/cards/` |
+| `SectionHeader` | Consistent H2/H3 with optional subtitle | `components/ui/` |
+| `StatNumber` | Big number + unit + delta display | `components/indicators/` |
+| `CommandBar` | Top-level KPI strip (score/risk/trend/cert) | `components/cards/` |
+| `EmissionsBarChart` | Stacked bar for scope visualization | `components/charts/` |
+
+### Page-by-Page Redesign Plan
+
+#### 1. [LoginPage](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/pages/auth/LoginPage.jsx#4-83) — Minor Polish
+- Replace `system-ui` with design system font token
+- Use `spacing` tokens instead of raw pixels
+- Add keyboard `Enter` handler for form submission
+
+#### 2. [DashboardPage](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/pages/dashboard/DashboardPage.jsx#9-73) — **Major Overhaul**
+- **Row 1:** Command Center strip ([ESGScoreCard](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/cards/ESGScoreCard.jsx#6-34) + [TrendAreaChart](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/charts/TrendAreaChart.jsx#5-24) + `RiskIndicator` + cert count)
+- **Row 2:** ESG Triad (3 pillar cards with sub-breakdowns)
+- **Row 3:** Emissions Intelligence (enhanced [EmissionsChart](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/components/charts/EmissionsChart.jsx#3-28) with bars + intensity)
+- **Row 4:** Quick Actions strip (top 3 priority actions from gap analysis)
+- Wire `RiskIndicator` (currently unused) into dashboard
+- Replace hardcoded `system-ui` with theme typography
+
+#### 3. [CertificationsPage](file:///c:/Users/Shalvin/Desktop/esg/frontend/src/pages/certifications/CertificationsPage.jsx#4-13) — **Build from Scratch**
+- Header with overall readiness stat
+- Grid of `CertificationDetailCard` components for IGBC, LEED, ISO 14001, NABH, GRI, BRSR, CDP, ISSB
+- Selected cert detail panel with requirements checklist
+- Gap severity indicators and timeline roadmap
+
+#### 4. `AssessmentWizardPage` — Refinement
+- **Step 1 (DataUpload):** Extract inline style objects to reusable style constants. No functional changes.
+- **Step 2 (Summary):** Break the 149-LOC monolith into extracted sub-section components.
+- **Step 3 (Results):** Replace hardcoded `strengths[]`, `gaps[]`, `roadmap[]` with computed values from scores. Break 195-LOC into sub-components.
+
+#### 5. `ReportsPage` / `SettingsPage` — Stub Enhancement
+- Add meaningful placeholder content with feature preview cards
+
+---
+
+## STEP 6 — Problems Identified (Prioritized)
+
+| # | Problem | Impact | Effort |
+|---|---|---|---|
+| 1 | **CertificationsPage is empty** — the most valuable differentiator (cert readiness engine) is missing | 🔴 Critical | High |
+| 2 | **RiskIndicator component never used** — risk is not surfaced anywhere | 🔴 Critical | Low |
+| 3 | **Hardcoded insights** — strengths, gaps, roadmap in ResultsStep are static strings, not computed | 🟠 High | Medium |
+| 4 | **No trend delta** — score trend exists as chart but there's no "+X from last period" indicator | 🟠 High | Low |
+| 5 | **Neon green palette** undermines enterprise trust — reads as gaming, not institutional | 🟠 High | Low |
+| 6 | **Inline styles everywhere** — 500+ declarations prevent consistency and slow re-rendering | 🟡 Medium | High |
+| 7 | **Spacing/typography tokens exist but aren't used** — `spacing.js` and `typography.js` are dead imports | 🟡 Medium | Medium |
+| 8 | **No action intelligence layer** — users see scores but get no prioritized "what to do" | 🟠 High | Medium |
+| 9 | **Social (S) pillar absent** — ESG without "S" is incomplete for healthcare context | 🟡 Medium | High |
+| 10 | **ResultsStep is 195 LOC monolith** — difficult to maintain and extend | 🟡 Medium | Medium |
+
+---
+
+## Top 10 High-Impact UI Improvements
+
+1. **Build the Certification Readiness Engine page** with per-cert gap analysis, requirement checklists, and timeline roadmap
+2. **Wire RiskIndicator into Command Center** — compute risk level from score thresholds and surface it prominently
+3. **Add trend delta annotations** ("↑ 4 pts") to ESGScoreCard and category cards
+4. **Replace neon green (`#00ff88`) with emerald (`#34d399`)** across all tokens for enterprise credibility
+5. **Compute insights dynamically** — replace hardcoded strengths/gaps/roadmap with actual score-derived analysis
+6. **Create ESG Triad section** on dashboard grouping E/S/G with sub-score breakdowns
+7. **Add Action Intelligence panel** to dashboard showing top 3-5 prioritized improvement actions
+8. **Enforce spacing/typography tokens** — systematic replacement of raw pixel values with theme tokens
+9. **Break ResultsStep monolith** into 5 extracted sub-components (ScorePanel, CertTable, StrengthsGaps, Roadmap, PathwayVisualization)
+10. **Add emissions visualization** — replace text-only EmissionsChart with stacked bar chart using Recharts
+
+---
+
+## Hackathon Winning Strategy Summary
+
+### What judges look for → How we deliver it
+
+| Judge Criteria | Our Advantage |
+|---|---|
+| **Instant comprehension** | Command Center top strip — score/risk/trend/cert in <5 seconds |
+| **Domain expertise** | 8+ real certification frameworks (IGBC, LEED, ISO, NABH, GRI, BRSR, CDP, ISSB) |
+| **Data intelligence density** | Computed gap analysis, not just score display — answer "why" and "what next" |
+| **Enterprise feel** | Muted emerald palette, strict 8px grid, professional typography hierarchy |
+| **Technical depth** | Pure function calculation engine, Zustand state management, modular architecture |
+| **Storytelling** | Status → Diagnosis → Impact → Action → Outcome flow on every page |
+
+### The killer differentiator:
+> **Certification Readiness Engine** — No competitor shows per-certification gap analysis with missing-requirements checklists and auto-generated roadmaps. This single feature transforms the platform from "another dashboard" into an "ESG intelligence advisor."
+
+---
+
+## Verification Plan
+
+### Visual Verification
+- Run `npm run dev` and navigate each page after changes
+- Verify Command Center renders score, trend, risk, and cert count
+- Verify CertificationsPage shows all 8 frameworks with gap details
+- Verify colors have shifted from neon to enterprise-muted tones
+- Verify spacing follows 8px grid system
+
+### Build Verification
+- Run `npm run build` — must complete with 0 errors
+- Verify no console warnings about missing imports or unused variables
+
+### Manual Verification (User)
+- Navigate Login → Dashboard → Assessment Wizard (all 3 steps) → Dashboard
+- Navigate to Certifications page — verify it's no longer an empty stub
+- Confirm the UI "feels" enterprise-grade vs the previous neon-green gaming aesthetic
