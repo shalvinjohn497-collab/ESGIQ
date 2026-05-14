@@ -12,6 +12,10 @@ export const assessmentApi = {
   remove:  (id)      => client.delete(`/assessments/${id}`),
   saveScores: (id, payload) =>
     client.put(`/assessments/${id}/scores`, payload),
+  saveResults: (id, results) =>
+    client.put(`/assessments/${id}/results`, results),
+  generatePdf: (id) =>
+    client.post(`/assessments/${id}/pdf`),
 };
 
 export default assessmentApi;

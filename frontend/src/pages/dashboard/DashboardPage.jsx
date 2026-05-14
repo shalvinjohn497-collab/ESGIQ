@@ -24,6 +24,10 @@ import { PageShell } from '../../components/premium/layout/PageShell';
 import { ReadinessHero } from '../../components/premium/readiness/ReadinessHero';
 import { ValidationSummary } from '../../components/premium/summary/ValidationSummary';
 import { PremiumCard } from '../../components/premium/shared/PremiumCard';
+import { useCrossCategoryConsistencySync } from '@/modules/assessment/hooks/useCrossCategoryConsistencySync';
+import CERTIFICATION_FRAMEWORKS from '@/constants/certificationFrameworks';
+import PrerequisiteAlert from '@/components/cards/PrerequisiteAlert';
+import RegulatoryReadinessTable from '@/components/premium/readiness/RegulatoryReadinessTable';
 
 // const sectionVariants = {
 //     hidden: { opacity: 0, y: 8 },
@@ -39,12 +43,14 @@ export default function DashboardPage() {
     const [ready, setReady] = useState(false);
     const navigate = useNavigate();
     const results = useAssessmentResults();
+    useCrossCategoryConsistencySync();
     const resolvedScores = results.scores;
     const rows = useAssessmentStore((s) => s.rows);
     const waterRows = useAssessmentStore((s) => s.waterRows);
     const fuelRows = useAssessmentStore((s) => s.fuelRows);
     const wasteRows = useAssessmentStore((s) => s.wasteRows);
     const uploadDuplicateResolution = useAssessmentStore((s) => s.uploadDuplicateResolution);
+    const uploadStatus = useAssessmentStore((s) => s.uploadStatus);
 
     const spikeWarningsByCategory = useMemo(
         () => ({
@@ -55,6 +61,17 @@ export default function DashboardPage() {
         }),
         [rows, waterRows, fuelRows, wasteRows]
     );
+
+    const unitMismatchByCategory = useMemo(() => {
+        const out = {};
+        for (const id of ['electricity', 'water', 'fuel', 'waste']) {
+            const u = uploadStatus?.[id];
+            if (u?.unitMismatch) {
+                out[id] = { unitMismatch: true, foundUnits: u.foundUnits || [] };
+            }
+        }
+        return Object.keys(out).length ? out : null;
+    }, [uploadStatus]);
 
     const metrics = {
   energyMonitoringMonths: resolvedScores?.filled || 0,
@@ -77,8 +94,18 @@ export default function DashboardPage() {
     // ];
 
     // Derived from unified certifications constant — no local duplication
-    const certPreviews = CERT_DASHBOARD_PREVIEWS;
-
+    const certPreviews = results?.certificationByFramework?.length
+        ? results.certificationByFramework.slice(0, 4).map(c => {
+            const fw = CERTIFICATION_FRAMEWORKS.find(f => f.id === c.frameworkId);
+            return {
+                name: fw?.name || c.frameworkId,
+                score: c.score,
+                time: c.timeline,
+                prerequisitesMet: c.prerequisitesMet,
+                failedChecks: c.failedChecks,
+            };
+        })
+        : CERT_DASHBOARD_PREVIEWS;
 
     return (
     <>
@@ -127,6 +154,8 @@ export default function DashboardPage() {
     }}
       spikeWarningsByCategory={spikeWarningsByCategory}
       duplicateNoticesByCategory={uploadDuplicateResolution}
+      unitMismatchByCategory={unitMismatchByCategory}
+      consistencyWarnings={results.consistencyWarnings ?? []}
     />
   </div>
 
@@ -222,12 +251,31 @@ export default function DashboardPage() {
                                         </span>
 
                                     </div>
+                                    
+                                    {!cert.prerequisitesMet && cert.failedChecks && cert.failedChecks.length > 0 && (
+                                        <PrerequisiteAlert failedChecks={cert.failedChecks} />
+                                    )}
 
                                 </div>
                             </PremiumCard>
                         ))}
 
                     </div>
+                </div>
+                
+                {/* REGULATORY READINESS */}
+                <div className="mt-8">
+                    <div className="flex items-center justify-between mb-6">
+                        <div>
+                            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">
+                                Regulatory Compliance
+                            </p>
+                            <h3 className="text-2xl font-bold text-slate-900">
+                                Global Regulatory Readiness
+                            </h3>
+                        </div>
+                    </div>
+                    <RegulatoryReadinessTable results={results.regulatoryResults} />
                 </div>
 
             </div>

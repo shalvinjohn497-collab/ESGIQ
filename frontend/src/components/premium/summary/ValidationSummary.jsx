@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, Info, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, AlertCircle, Info, ShieldCheck } from 'lucide-react';
 import { PremiumCard } from '../shared/PremiumCard';
 
 const SPIKE_CATEGORY_LABEL = {
@@ -17,6 +17,8 @@ export const ValidationSummary = ({
     metrics = {},
     spikeWarningsByCategory = null,
     duplicateNoticesByCategory = null,
+    unitMismatchByCategory = null,
+    consistencyWarnings = null,
 }) => {
     const spikeEntries =
         spikeWarningsByCategory &&
@@ -27,6 +29,14 @@ export const ValidationSummary = ({
         Object.entries(duplicateNoticesByCategory).filter(
             ([, info]) => info && typeof info.duplicatesRemoved === 'number' && info.duplicatesRemoved > 0
         );
+
+    const unitMismatchEntries =
+        unitMismatchByCategory &&
+        Object.entries(unitMismatchByCategory).filter(([, info]) => info?.unitMismatch);
+
+    const consistencyList = Array.isArray(consistencyWarnings) ? consistencyWarnings : [];
+    const consistencyErrors = consistencyList.filter((w) => w.severity === 'error');
+    const consistencySoft = consistencyList.filter((w) => w.severity === 'warning');
 
     return (
         <PremiumCard className="p-8">
@@ -43,6 +53,62 @@ export const ValidationSummary = ({
                     </p>
                 </div>
             </div>
+
+            {(consistencyErrors.length > 0 || consistencySoft.length > 0) && (
+                <div className="space-y-3 mb-8">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        Cross-category consistency (BRD §7)
+                    </p>
+                    {consistencyErrors.map((w) => (
+                        <div
+                            key={w.id}
+                            className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-950"
+                        >
+                            <div className="flex items-start gap-2 font-semibold text-red-900">
+                                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-red-600" />
+                                <span>{w.message}</span>
+                            </div>
+                            <p className="text-xs text-red-800/80 mt-1 pl-6">{w.rule}</p>
+                        </div>
+                    ))}
+                    {consistencySoft.map((w) => (
+                        <div
+                            key={w.id}
+                            className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+                        >
+                            <div className="flex items-start gap-2 font-semibold text-amber-900">
+                                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-600" />
+                                <span>{w.message}</span>
+                            </div>
+                            <p className="text-xs text-amber-800/85 mt-1 pl-6">{w.rule}</p>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {unitMismatchEntries && unitMismatchEntries.length > 0 && (
+                <div className="space-y-3 mb-8">
+                    {unitMismatchEntries.map(([categoryId, info]) => (
+                        <div
+                            key={`unit-${categoryId}`}
+                            className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-950"
+                        >
+                            <div className="flex items-start gap-2 font-semibold text-red-900">
+                                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-red-600" />
+                                <span>
+                                    Mixed units detected — please re-upload with a consistent unit.
+                                </span>
+                            </div>
+                            <p className="text-xs text-red-800/90 mt-1 pl-6">
+                                {SPIKE_CATEGORY_LABEL[categoryId] || categoryId}
+                                {info?.foundUnits?.length
+                                    ? ` — units seen: ${info.foundUnits.join(', ')}`
+                                    : ''}
+                            </p>
+                        </div>
+                    ))}
+                </div>
+            )}
 
             {duplicateEntries && duplicateEntries.length > 0 && (
                 <div className="space-y-3 mb-8">

@@ -6,6 +6,7 @@ import ResultsStep from '@/modules/assessment/steps/ResultsStep';
 import useAssessmentStore from '@/modules/assessment/store/assessment.store';
 import { ROUTES } from '@/constants/routes';
 import { useAssessmentPersistence } from '@/modules/assessment/hooks/useAssessmentPersistence';
+import { useCrossCategoryConsistencySync } from '@/modules/assessment/hooks/useCrossCategoryConsistencySync';
 
 /**
  * AssessmentWizardPage — thin shell; wizard steps read from Zustand store directly.
@@ -14,6 +15,7 @@ export default function AssessmentWizardPage() {
     const location = useLocation();
     const setStep = useAssessmentStore((state) => state.setStep);
      useAssessmentPersistence();
+    useCrossCategoryConsistencySync();
     useEffect(() => {
         if (location.pathname === ROUTES.ASSESSMENT_UPLOAD) setStep(1);
         else if (location.pathname === ROUTES.ASSESSMENT_SUMMARY) setStep(2);

@@ -20,6 +20,99 @@ function num(row, ...keys) {
     return 0;
 }
 
+const ROW_UNIT_KEYS = ['Unit', 'unit', 'Units', 'units', 'UOM', 'uom', 'Unit_of_Measure', 'unit_of_measure'];
+
+/** Raw label from row "Unit" column, if present. */
+function unitFromRow(row) {
+    if (!row || typeof row !== 'object') return null;
+    for (const k of ROW_UNIT_KEYS) {
+        const v = row[k];
+        if (v == null || v === '' || v === 0) continue;
+        const s = String(v).trim();
+        if (s) return s;
+    }
+    return null;
+}
+
+/** Try to read a unit token from the physical sheet name (e.g. "Electricity (MWh)"). */
+function unitFromSheetName(sheetDisplayName) {
+    const s = String(sheetDisplayName ?? '').toLowerCase();
+    const m = s.match(/\b(mwh|gwh|kwh|kl|kg|litres?|liters?|m³|m3|tonnes?|tons?)\b/i);
+    if (!m) return null;
+    const x = m[1].toLowerCase();
+    if (x === 'kwh') return 'kWh';
+    if (x === 'mwh') return 'MWh';
+    if (x === 'gwh') return 'GWh';
+    if (x === 'kl') return 'KL';
+    if (x === 'kg') return 'kg';
+    if (x.startsWith('litre') || x.startsWith('liter')) return 'L';
+    if (x === 'm³' || x === 'm3') return 'm³';
+    if (x.startsWith('ton')) return 't';
+    return m[1];
+}
+
+/**
+ * @param {object|null|undefined} row
+ * @param {string} sheetDisplayName — actual workbook sheet title for that category
+ */
+export function extractRowUnit(row, sheetDisplayName) {
+    return unitFromRow(row) || unitFromSheetName(sheetDisplayName) || null;
+}
+
+/** Normalize for equality (distinct physical units). */
+function unitCompareKey(label) {
+    if (label == null || label === '') return null;
+    const n = String(label)
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '')
+        .replace(/²/g, '2')
+        .replace(/³/g, '3');
+    if (!n) return null;
+    if (n.includes('mwh') || n === 'megawatthours' || n === 'megawatt-hour' || n === 'megawatt-h') return 'mwh';
+    if (n.includes('kwh') || n.includes('kilowatthour') || n.includes('kilowatt-hour')) return 'kwh';
+    if (n.includes('gwh')) return 'gwh';
+    if (n.includes('mj')) return 'mj';
+    if (n === 'kl' || n.includes('kilolitre') || n.includes('kiloliter')) return 'kl';
+    if (n === 'l' || n.includes('litre') || n.includes('liter')) return 'l';
+    if (n === 'm3' || n === 'm³' || n.includes('cubicmetre') || n.includes('cubicmeter')) return 'm3';
+    if (n.includes('kg') || n.includes('kilogram')) return 'kg';
+    if (n.includes('tonne') || n.includes('metricton') || n === 't' || n === 'mt') return 't';
+    return n;
+}
+
+/**
+ * @param {(string|null|undefined)[]} monthUnits — one label per calendar month (same order as rows)
+ * @returns {{ status: 'OK' } | { status: 'ERROR', unitMismatch: true, foundUnits: string[] }}
+ */
+export function assessMonthlyUnitConsistency(monthUnits) {
+    const byKey = new Map();
+    for (const label of monthUnits) {
+        if (label == null || label === '') continue;
+        const k = unitCompareKey(String(label));
+        if (!k) continue;
+        if (!byKey.has(k)) byKey.set(k, String(label).trim());
+    }
+    if (byKey.size <= 1) return { status: 'OK' };
+    return {
+        status: 'ERROR',
+        unitMismatch: true,
+        foundUnits: Array.from(byKey.values()).sort(),
+    };
+}
+
+function workbookSheetTitle(workbook, logicalLower) {
+    const target = String(logicalLower).trim().toLowerCase();
+    const key = workbook.SheetNames.find((n) => n.trim().toLowerCase() === target);
+    return key || logicalLower;
+}
+
+function categoryMismatchMessage(categoryId) {
+    const label =
+        { electricity: 'Electricity', water: 'Water', fuel: 'Fuel', waste: 'Waste' }[categoryId] || categoryId;
+    return `${label}: Mixed units detected — please re-upload with a consistent unit.`;
+}
+
 function monthMatch(cellVal, monthKey) {
     const s = String(cellVal ?? '').trim().toLowerCase();
     const m = monthKey.toLowerCase();
@@ -163,24 +256,40 @@ export async function parseExcelUpload(file, category = 'all') {
             duplicatesRemoved: electricityParsed.duplicateResolution.duplicatesRemoved,
             months: electricityParsed.duplicateResolution.months,
             keptDetails: electricityParsed.duplicateResolution.keptDetails,
+            status: electricityParsed.status || 'OK',
+            ...(electricityParsed.unitMismatch
+                ? { unitMismatch: true, foundUnits: electricityParsed.foundUnits || [] }
+                : {}),
         },
         water: {
             spikeWarnings: detectSpikes(toMonthlyWaterValues(waterParsed.rows)),
             duplicatesRemoved: waterParsed.duplicateResolution.duplicatesRemoved,
             months: waterParsed.duplicateResolution.months,
             keptDetails: waterParsed.duplicateResolution.keptDetails,
+            status: waterParsed.status || 'OK',
+            ...(waterParsed.unitMismatch
+                ? { unitMismatch: true, foundUnits: waterParsed.foundUnits || [] }
+                : {}),
         },
         fuel: {
             spikeWarnings: detectSpikes(toMonthlyFuelValues(fuelParsed.rows)),
             duplicatesRemoved: fuelParsed.duplicateResolution.duplicatesRemoved,
             months: fuelParsed.duplicateResolution.months,
             keptDetails: fuelParsed.duplicateResolution.keptDetails,
+            status: fuelParsed.status || 'OK',
+            ...(fuelParsed.unitMismatch
+                ? { unitMismatch: true, foundUnits: fuelParsed.foundUnits || [] }
+                : {}),
         },
         waste: {
             spikeWarnings: detectSpikes(toMonthlyWasteValues(wasteParsed.rows)),
             duplicatesRemoved: wasteParsed.duplicateResolution.duplicatesRemoved,
             months: wasteParsed.duplicateResolution.months,
             keptDetails: wasteParsed.duplicateResolution.keptDetails,
+            status: wasteParsed.status || 'OK',
+            ...(wasteParsed.unitMismatch
+                ? { unitMismatch: true, foundUnits: wasteParsed.foundUnits || [] }
+                : {}),
         },
     };
 
@@ -211,8 +320,13 @@ function parseElectricitySheet(workbook, errors) {
     const sheet = findSheet(workbook, 'electricity');
     if (!sheet) {
         errors.push('Sheet "Electricity" not found — skipping.');
-        return { rows: emptyElectricityRows(), duplicateResolution: emptyDuplicateResolution() };
+        return {
+            rows: emptyElectricityRows(),
+            duplicateResolution: emptyDuplicateResolution(),
+            status: 'OK',
+        };
     }
+    const sheetTitle = workbookSheetTitle(workbook, 'electricity');
     const raw = XLSX.utils.sheet_to_json(sheet, { defval: 0 });
         // ── RAW XLSX DEBUG ─────────────────────────────────────────
     console.log('RAW row count:', raw.length);
@@ -222,6 +336,7 @@ function parseElectricitySheet(workbook, errors) {
     let duplicatesRemoved = 0;
     const dupMonths = [];
     const keptDetails = [];
+    const monthUnits = [];
 
     const rows = MONTH_KEYS.map((monthKey) => {
         const matches = raw.filter((r) => monthMatch(r.Month ?? r.month, monthKey));
@@ -239,6 +354,7 @@ function parseElectricitySheet(workbook, errors) {
             });
         }
         const found = winner;
+        monthUnits.push(extractRowUnit(found, sheetTitle));
         return {
             month:  monthKey,
             elec:   num(found, 'Electricity_kWh', 'elec'),
@@ -248,9 +364,15 @@ function parseElectricitySheet(workbook, errors) {
         };
     });
 
+    const unitCheck = assessMonthlyUnitConsistency(monthUnits);
+    if (unitCheck.status === 'ERROR') {
+        errors.push(categoryMismatchMessage('electricity'));
+    }
+
     return {
         rows,
         duplicateResolution: { duplicatesRemoved, months: dupMonths, keptDetails },
+        ...unitCheck,
     };
 }
 
@@ -258,12 +380,18 @@ function parseWaterSheet(workbook, errors) {
     const sheet = findSheet(workbook, 'water');
     if (!sheet) {
         errors.push('Sheet "Water" not found — skipping.');
-        return { rows: emptyWaterRows(), duplicateResolution: emptyDuplicateResolution() };
+        return {
+            rows: emptyWaterRows(),
+            duplicateResolution: emptyDuplicateResolution(),
+            status: 'OK',
+        };
     }
+    const sheetTitle = workbookSheetTitle(workbook, 'water');
     const raw = XLSX.utils.sheet_to_json(sheet, { defval: 0 });
     let duplicatesRemoved = 0;
     const dupMonths = [];
     const keptDetails = [];
+    const monthUnits = [];
 
     const rows = MONTH_KEYS.map((monthKey) => {
         const matches = raw.filter((r) => monthMatch(r.Month ?? r.month, monthKey));
@@ -283,6 +411,7 @@ function parseWaterSheet(workbook, errors) {
             });
         }
         const found = winner;
+        monthUnits.push(extractRowUnit(found, sheetTitle));
         const municipal = num(found, 'Municipal_KL', 'municipal');
         const tanker = num(found, 'Tanker_KL', 'tanker');
         const borewell = num(found, 'Borewell_KL', 'borewell');
@@ -297,9 +426,15 @@ function parseWaterSheet(workbook, errors) {
         };
     });
 
+    const unitCheck = assessMonthlyUnitConsistency(monthUnits);
+    if (unitCheck.status === 'ERROR') {
+        errors.push(categoryMismatchMessage('water'));
+    }
+
     return {
         rows,
         duplicateResolution: { duplicatesRemoved, months: dupMonths, keptDetails },
+        ...unitCheck,
     };
 }
 
@@ -307,12 +442,18 @@ function parseFuelSheet(workbook, errors) {
     const sheet = findSheet(workbook, 'fuel');
     if (!sheet) {
         errors.push('Sheet "Fuel" not found — skipping.');
-        return { rows: emptyFuelRows(), duplicateResolution: emptyDuplicateResolution() };
+        return {
+            rows: emptyFuelRows(),
+            duplicateResolution: emptyDuplicateResolution(),
+            status: 'OK',
+        };
     }
+    const sheetTitle = workbookSheetTitle(workbook, 'fuel');
     const raw = XLSX.utils.sheet_to_json(sheet, { defval: 0 });
     let duplicatesRemoved = 0;
     const dupMonths = [];
     const keptDetails = [];
+    const monthUnits = [];
 
     const rows = MONTH_KEYS.map((monthKey) => {
         const matches = raw.filter((r) => monthMatch(r.Month ?? r.month, monthKey));
@@ -329,6 +470,7 @@ function parseFuelSheet(workbook, errors) {
             });
         }
         const found = winner;
+        monthUnits.push(extractRowUnit(found, sheetTitle));
         return {
             month:      monthKey,
             fuelDiesel: num(found, 'Diesel_Litres', 'fuelDiesel'),
@@ -337,9 +479,15 @@ function parseFuelSheet(workbook, errors) {
         };
     });
 
+    const unitCheck = assessMonthlyUnitConsistency(monthUnits);
+    if (unitCheck.status === 'ERROR') {
+        errors.push(categoryMismatchMessage('fuel'));
+    }
+
     return {
         rows,
         duplicateResolution: { duplicatesRemoved, months: dupMonths, keptDetails },
+        ...unitCheck,
     };
 }
 
@@ -347,12 +495,18 @@ function parseWasteSheet(workbook, errors) {
     const sheet = findSheet(workbook, 'waste');
     if (!sheet) {
         errors.push('Sheet "Waste" not found — skipping.');
-        return { rows: emptyWasteRows(), duplicateResolution: emptyDuplicateResolution() };
+        return {
+            rows: emptyWasteRows(),
+            duplicateResolution: emptyDuplicateResolution(),
+            status: 'OK',
+        };
     }
+    const sheetTitle = workbookSheetTitle(workbook, 'waste');
     const raw = XLSX.utils.sheet_to_json(sheet, { defval: 0 });
     let duplicatesRemoved = 0;
     const dupMonths = [];
     const keptDetails = [];
+    const monthUnits = [];
 
     const rows = MONTH_KEYS.map((monthKey) => {
         const matches = raw.filter((r) => monthMatch(r.Month ?? r.month, monthKey));
@@ -368,6 +522,7 @@ function parseWasteSheet(workbook, errors) {
             });
         }
         const found = winner;
+        monthUnits.push(extractRowUnit(found, sheetTitle));
         return {
             month:      monthKey,
             wet:        num(found, 'Wet_kg', 'wet'),
@@ -378,9 +533,15 @@ function parseWasteSheet(workbook, errors) {
         };
     });
 
+    const unitCheck = assessMonthlyUnitConsistency(monthUnits);
+    if (unitCheck.status === 'ERROR') {
+        errors.push(categoryMismatchMessage('waste'));
+    }
+
     return {
         rows,
         duplicateResolution: { duplicatesRemoved, months: dupMonths, keptDetails },
+        ...unitCheck,
     };
 }
 

@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { parseExcelUpload } from '@/utils/parseExcelUpload';
+import { runCrossCategoryConsistencyChecks } from '@/utils/validation/crossCategoryChecks';
 import useAssessmentStore from '@/modules/assessment/store/assessment.store';
 import { assessmentApi } from '@/services/api/assessment.api';
 
@@ -76,6 +77,23 @@ export function useFileUpload() {
                 dupPatch[category] = pickDup(category);
             }
             useAssessmentStore.getState().setUploadDuplicateResolution(dupPatch);
+
+            const applyParserUnitFlagsToStore = () => {
+                const cats = category === 'all' ? ['electricity', 'water', 'fuel', 'waste'] : [category];
+                for (const c of cats) {
+                    const pc = parsedCategories?.[c];
+                    const prev = useAssessmentStore.getState().uploadStatus[c] || {};
+                    const next = { ...prev };
+                    if (pc?.unitMismatch) {
+                        next.unitMismatch = true;
+                        next.foundUnits = Array.isArray(pc.foundUnits) ? pc.foundUnits : [];
+                    } else {
+                        delete next.unitMismatch;
+                        delete next.foundUnits;
+                    }
+                    useAssessmentStore.getState().setUploadStatus(c, next);
+                }
+            };
 
             // ── CHECKPOINT 2: Raw parser output ──────────────────
             console.group(`🔍 Parser output — category: "${category}"`);
@@ -154,6 +172,18 @@ export function useFileUpload() {
 
             if (updatedAssessment) {
                 hydrateFromApi(updatedAssessment);
+            }
+            applyParserUnitFlagsToStore();
+            {
+                const s = useAssessmentStore.getState();
+                s.setConsistencyWarnings(
+                    runCrossCategoryConsistencyChecks({
+                        electricityRows: s.rows,
+                        wasteRows: s.wasteRows,
+                        flags: s.flags,
+                        refrigerantData: s.flags?.refrigerantData,
+                    }),
+                );
             }
 
             setLastUploaded({ category, fileName: file.name, timestamp: Date.now() });

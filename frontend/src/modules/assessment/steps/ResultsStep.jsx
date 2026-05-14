@@ -14,7 +14,14 @@ import { ROUTES } from '@/constants/routes';
 import { PageShell } from '../../../components/premium/layout/PageShell';
 import { PremiumCard } from '../../../components/premium/shared/PremiumCard';
 import { ReadinessHero } from '../../../components/premium/readiness/ReadinessHero';
-import {useEffect } from 'react';
+import ExecutiveSummary from '@/components/premium/readiness/ExecutiveSummary';
+import CertificationReadinessMatrix from '@/components/premium/readiness/CertificationReadinessMatrix';
+import RegulatoryReadinessTable from '@/components/premium/readiness/RegulatoryReadinessTable';
+import StrengthsGapsList from '@/components/premium/readiness/StrengthsGapsList';
+import CertificationPathwaySequencing from '@/components/premium/readiness/CertificationPathwaySequencing';
+import { useSaveAssessmentResults } from '@/modules/assessment/hooks/useSaveAssessmentResults';
+import { useDownloadPdf } from '@/modules/assessment/hooks/useDownloadPdf';
+import { useEffect, useCallback } from 'react';
 export default function ResultsStep() {
     const navigate = useNavigate();
     const { showToast } = useToast();
@@ -50,10 +57,29 @@ export default function ResultsStep() {
     // but the generator should handle standard paths.
     if (strengths.length === 0) strengths.push('Data ingestion successful');
     if (gaps.length === 0) gaps.push('No critical compliance blockers detected');
+
+    const sortedCerts = [...certRows].sort((a, b) => (b.score || 0) - (a.score || 0));
+    const bestCertification = sortedCerts[0];
     
-      useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
+    let regRiskSummary = "Regulatory compliance checks pending.";
+    if (results.regulatoryResults?.length > 0) {
+        const applicable = results.regulatoryResults.filter(r => r.applicable);
+        const highRisk = applicable.filter(r => r.riskLevel === 'High').length;
+        if (highRisk > 0) regRiskSummary = `You have ${highRisk} high-risk regulatory gaps that require immediate attention.`;
+        else regRiskSummary = `Your baseline regulatory readiness is stable with no immediate high-risk gaps detected across applicable frameworks.`;
+    }
+
+    const onSaveSuccess = useCallback(() => showToast('Results saved successfully.', 'success'), [showToast]);
+    const onSaveError = useCallback(() => showToast('Failed to save results. Your data is still available locally.', 'error'), [showToast]);
+    useSaveAssessmentResults(results, { onSuccess: onSaveSuccess, onError: onSaveError });
+
+    const onPdfSuccess = useCallback(() => showToast('PDF downloaded successfully.', 'success'), [showToast]);
+    const onPdfError = useCallback(() => showToast('PDF generation failed. Please try again.', 'error'), [showToast]);
+    const { downloadPdf, isGenerating: isPdfGenerating } = useDownloadPdf({ onSuccess: onPdfSuccess, onError: onPdfError });
+
+    useEffect(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, []);
    return (
   <PageShell
     title="Readiness Intelligence"
@@ -70,205 +96,35 @@ export default function ResultsStep() {
         radarData={radarData}
       />
 
-      {/* CERTIFICATIONS + INSIGHTS */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <ExecutiveSummary 
+          overallScore={resolvedScores.overall}
+          readinessStage={lvLabel}
+          strengths={strengths}
+          gaps={gaps}
+          bestCertification={bestCertification}
+          regulatoryRiskSummary={regRiskSummary}
+      />
 
-        {/* Certification Readiness */}
-        <div className="lg:col-span-2">
-          <PremiumCard className="p-8 h-full">
-
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <h3 className="text-2xl font-bold text-slate-900">
-                  Certification Readiness
-                </h3>
-
-                <p className="text-slate-500 mt-1">
-                  Multi-framework ESG eligibility scoring.
-                </p>
-              </div>
-
-              <div className="px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold">
-                {resolvedScores.overall}% Overall
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {certRows.map((cert) => (
-                <div
-                  key={cert.id}
-                  className="border border-slate-200 rounded-2xl p-5"
-                >
-                  <div className="flex items-center justify-between mb-4">
-
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="font-bold text-slate-900">
-                          {cert.name}
-                        </h4>
-
-                        {cert.isPrimary && (
-                          <span className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase">
-                            Primary
-                          </span>
-                        )}
-                      </div>
-
-                      <p className="text-sm text-slate-500 mt-1">
-                        {cert.majorGap || 'No major blockers detected'}
-                      </p>
-                    </div>
-
-                    <div className="text-right">
-                      <div
-                        className="text-2xl font-black tracking-tight"
-                        style={{ color: cert.color }}
-                      >
-                        {cert.score}%
-                      </div>
-
-                      <div className="text-xs text-slate-400">
-                        {cert.timeline}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full"
-                      style={{
-                        width: `${cert.score}%`,
-                        background: cert.color,
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-          </PremiumCard>
-        </div>
-
-        {/* Strengths + Gaps */}
-        <div className="space-y-6">
-
-          {/* Strengths */}
-          <PremiumCard className="p-6">
-
-            <div className="mb-5">
-              <h4 className="text-lg font-bold text-slate-900">
-                Operational Strengths
-              </h4>
-
-              <p className="text-sm text-slate-500 mt-1">
-                Positive ESG maturity indicators.
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              {strengths.map((s) => (
-                <div
-                  key={s}
-                  className="flex items-start gap-3"
-                >
-                  <div className="w-2 h-2 rounded-full bg-emerald-500 mt-2" />
-
-                  <p className="text-sm text-slate-600 leading-relaxed">
-                    {s}
-                  </p>
-                </div>
-              ))}
-            </div>
-
-          </PremiumCard>
-
-          {/* Gaps */}
-          <PremiumCard className="p-6">
-
-            <div className="mb-5">
-              <h4 className="text-lg font-bold text-slate-900">
-                Critical Gaps
-              </h4>
-
-              <p className="text-sm text-slate-500 mt-1">
-                High-priority compliance blockers.
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              {gaps.slice(0, 4).map((g) => (
-                <div
-                  key={g}
-                  className="flex items-start gap-3"
-                >
-                  <div className="w-2 h-2 rounded-full bg-amber-500 mt-2" />
-
-                  <p className="text-sm text-slate-600 leading-relaxed">
-                    {g}
-                  </p>
-                </div>
-              ))}
-            </div>
-
-          </PremiumCard>
-
-        </div>
+      {/* CERTIFICATIONS */}
+      <div>
+          <h3 className="text-2xl font-bold text-slate-900 mb-6">Certification Readiness Matrix</h3>
+          <CertificationReadinessMatrix frameworks={certRows} />
       </div>
 
-      {/* ROADMAP */}
-      <PremiumCard className="p-8">
+      {/* REGULATORY */}
+      <div>
+          <h3 className="text-2xl font-bold text-slate-900 mb-6">Global Regulatory Readiness</h3>
+          <RegulatoryReadinessTable results={results.regulatoryResults || []} />
+      </div>
 
-        <div className="mb-8">
-          <h3 className="text-2xl font-bold text-slate-900">
-            Strategic ESG Roadmap
-          </h3>
+      {/* STRENGTHS & GAPS */}
+      <div>
+          <h3 className="text-2xl font-bold text-slate-900 mb-6">Maturity Analysis & Action Plan</h3>
+          <StrengthsGapsList strengths={strengths} gaps={gaps} roadmap={roadmap} />
+      </div>
 
-          <p className="text-slate-500 mt-1">
-            Recommended progression toward certification maturity.
-          </p>
-        </div>
-
-        <div className="space-y-0">
-          {roadmap.map((r, i) => (
-            <div
-              key={i}
-              className="relative pl-10 pb-10 border-l border-slate-200 ml-3 last:pb-0"
-            >
-
-              <div className="absolute left-[-8px] top-1 w-4 h-4 rounded-full bg-white border-2 border-emerald-500" />
-
-              <div className="flex flex-col">
-
-                <div className="flex items-center gap-3 mb-2">
-
-                  <span
-                    className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-lg ${
-                      r.priority === 'high'
-                        ? 'bg-rose-50 text-rose-700'
-                        : r.priority === 'medium'
-                        ? 'bg-amber-50 text-amber-700'
-                        : 'bg-emerald-50 text-emerald-700'
-                    }`}
-                  >
-                    {r.phase}
-                  </span>
-
-                  <span className="text-xs text-slate-400">
-                    {r.cert}
-                  </span>
-
-                </div>
-
-                <h4 className="text-lg font-semibold text-slate-900">
-                  {r.action}
-                </h4>
-
-              </div>
-            </div>
-          ))}
-        </div>
-
-      </PremiumCard>
+      {/* PATHWAY */}
+      <CertificationPathwaySequencing frameworks={certRows} roadmap={roadmap} />
 
       {/* ACTIONS */}
       <div className="flex items-center justify-between pt-2">
@@ -284,11 +140,10 @@ export default function ResultsStep() {
 
           <Button
             variant="secondary"
-            onClick={() =>
-              showToast('Feature unlocks on backend integration.')
-            }
+            onClick={downloadPdf}
+            disabled={isPdfGenerating}
           >
-            Export Report
+            {isPdfGenerating ? 'Generating PDF…' : 'Download PDF'}
           </Button>
 
           <Button

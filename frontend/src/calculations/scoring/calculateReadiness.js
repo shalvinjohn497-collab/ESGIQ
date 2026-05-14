@@ -31,11 +31,12 @@ export function getFilledMonthsForUploadCategory(categoryId, { rows, waterRows, 
 /**
  * Derive BRD upload status from months-with-data and parse/validation outcome.
  * @param {number} monthsWithData
- * @param {{ parseFailed?: boolean }} meta
+ * @param {{ parseFailed?: boolean, unitMismatch?: boolean }} meta
  * @returns {string} One of the `STATUS` string constants from `@/constants/uploadCategoryStatus`.
  */
-export function deriveCategoryDataStatus(monthsWithData, { parseFailed = false } = {}) {
+export function deriveCategoryDataStatus(monthsWithData, { parseFailed = false, unitMismatch = false } = {}) {
     const m = Math.min(12, Math.max(0, Math.floor(Number(monthsWithData)) || 0));
+    if (unitMismatch) return STATUS.ERROR;
     if (parseFailed && m === 0) return STATUS.ERROR;
     if (m === 0) return STATUS.MISSING;
     if (m >= 12) return STATUS.COMPLETE;
@@ -44,7 +45,7 @@ export function deriveCategoryDataStatus(monthsWithData, { parseFailed = false }
 }
 
 /**
- * @param {{ rows?: unknown[], waterRows?: unknown[], fuelRows?: unknown[], wasteRows?: unknown[], uploadStatus?: Record<string, { monthsUploaded?: number, parseFailed?: boolean, source?: string }> }} params
+ * @param {{ rows?: unknown[], waterRows?: unknown[], fuelRows?: unknown[], wasteRows?: unknown[], uploadStatus?: Record<string, { monthsUploaded?: number, parseFailed?: boolean, source?: string, unitMismatch?: boolean }> }} params
  * @returns {Record<string, { months: number, status: string }>}
  */
 export function buildCategoryUploadStatuses({ rows, waterRows, fuelRows, wasteRows, uploadStatus } = {}) {
@@ -54,13 +55,15 @@ export function buildCategoryUploadStatuses({ rows, waterRows, fuelRows, wasteRo
         const months = getFilledMonthsForUploadCategory(id, { rows, waterRows, fuelRows, wasteRows });
         const entry = uploadStatus?.[id];
         const parseFailed = Boolean(entry?.parseFailed || entry?.source === 'error');
-        out[id] = { months, status: deriveCategoryDataStatus(months, { parseFailed }) };
+        const unitMismatch = Boolean(entry?.unitMismatch);
+        out[id] = { months, status: deriveCategoryDataStatus(months, { parseFailed, unitMismatch }) };
     }
     for (const id of ['refrigerants', 'transport', 'governance']) {
         const entry = uploadStatus?.[id];
         const parseFailed = Boolean(entry?.parseFailed || entry?.source === 'error');
+        const unitMismatch = Boolean(entry?.unitMismatch);
         const months = Math.min(12, Math.max(0, Math.floor(Number(entry?.monthsUploaded)) || 0));
-        out[id] = { months, status: deriveCategoryDataStatus(months, { parseFailed }) };
+        out[id] = { months, status: deriveCategoryDataStatus(months, { parseFailed, unitMismatch }) };
     }
     return out;
 }
