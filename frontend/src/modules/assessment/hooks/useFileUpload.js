@@ -20,6 +20,21 @@ export function useFileUpload() {
         ];
         if (!validTypes.includes(file.type) && !file.name.match(/\.(xlsx|xls|csv)$/i)) {
             setUploadErrors(['Invalid file type. Please upload .xlsx, .xls, or .csv files.']);
+            if (category === 'all') {
+                ['electricity', 'water', 'fuel', 'waste'].forEach((c) =>
+                    useAssessmentStore.getState().setUploadStatus(c, {
+                        monthsUploaded: 0,
+                        source: 'error',
+                        parseFailed: true,
+                    })
+                );
+            } else {
+                useAssessmentStore.getState().setUploadStatus(category, {
+                    monthsUploaded: 0,
+                    source: 'error',
+                    parseFailed: true,
+                });
+            }
             return;
         }
 
@@ -34,7 +49,33 @@ export function useFileUpload() {
         console.groupEnd();
 
         try {
-            const { electricityRows, waterRows, fuelRows, wasteRows, errors } = await parseExcelUpload(file, category);
+            const {
+                electricityRows,
+                waterRows,
+                fuelRows,
+                wasteRows,
+                errors,
+                parsedCategories,
+            } = await parseExcelUpload(file, category);
+
+            const dupPatch = {};
+            const pickDup = (catId) => {
+                const pc = parsedCategories?.[catId];
+                if (!pc || !pc.duplicatesRemoved) return null;
+                return {
+                    duplicatesRemoved: pc.duplicatesRemoved,
+                    months: pc.months || [],
+                    keptDetails: pc.keptDetails || [],
+                };
+            };
+            if (category === 'all') {
+                for (const c of ['electricity', 'water', 'fuel', 'waste']) {
+                    dupPatch[c] = pickDup(c);
+                }
+            } else {
+                dupPatch[category] = pickDup(category);
+            }
+            useAssessmentStore.getState().setUploadDuplicateResolution(dupPatch);
 
             // ── CHECKPOINT 2: Raw parser output ──────────────────
             console.group(`🔍 Parser output — category: "${category}"`);
@@ -124,6 +165,22 @@ export function useFileUpload() {
             console.error('Error message :', err.message);
             console.error('Stack         :', err.stack);
             console.groupEnd();
+
+            if (category === 'all') {
+                ['electricity', 'water', 'fuel', 'waste'].forEach((c) =>
+                    useAssessmentStore.getState().setUploadStatus(c, {
+                        monthsUploaded: 0,
+                        source: 'error',
+                        parseFailed: true,
+                    })
+                );
+            } else {
+                useAssessmentStore.getState().setUploadStatus(category, {
+                    monthsUploaded: 0,
+                    source: 'error',
+                    parseFailed: true,
+                });
+            }
 
             setUploadErrors([`Failed to parse file: ${err.message}`]);
         } finally {

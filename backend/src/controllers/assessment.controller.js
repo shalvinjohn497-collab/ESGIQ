@@ -50,7 +50,7 @@ export const assessmentController = {
       waterRows: [],
       fuelRows: [],
       wasteRows: [],
-      flags: {},
+      flags: req.body.flags && typeof req.body.flags === 'object' ? req.body.flags : {},
       uploadStatus: {},
       scores: {},
       emissions: {},

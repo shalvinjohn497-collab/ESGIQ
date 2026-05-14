@@ -2,6 +2,7 @@ import { useEffect, useCallback, useRef, useState } from 'react';
 import { assessmentApi } from '@/services/api/assessment.api';
 import useAssessmentStore from '@/modules/assessment/store/assessment.store';
 import useAuthStore from '@/store/auth.store';
+import { DEFAULT_SECTOR } from '@/constants/sectors';
 
 
 export function useAssessmentPersistence() {
@@ -9,7 +10,7 @@ export function useAssessmentPersistence() {
   const saveTimerRef    = useRef(null);
   const [isHydrating, setIsHydrating] = useState(true);
 
-  const { flags, hydrateFromApi, setAssessmentId } = useAssessmentStore();
+  const { flags, sector, hydrateFromApi, setAssessmentId } = useAssessmentStore();
   const token = useAuthStore((s) => s.token);
   
 
@@ -52,18 +53,20 @@ export function useAssessmentPersistence() {
   // ── Auto-save with 2s debounce (governance ONLY) ──────────────
   const save = useCallback(async () => {
     if (!token) return;
-    const payload = { flags };
+    const payload = { flags, sector: sector || DEFAULT_SECTOR };
     try {
       if (assessmentIdRef.current) {
-        await assessmentApi.saveGovernance(assessmentIdRef.current, payload);
+        await assessmentApi.update(assessmentIdRef.current, payload);
       } else {
         const res = await assessmentApi.create(payload);
-        assessmentIdRef.current = res.data?.assessment?._id;
+        const id = res.data?.assessment?._id;
+        assessmentIdRef.current = id;
+        if (id) setAssessmentId(id);
       }
     } catch (e) {
       console.error('Governance save failed:', e.message);
     }
-  }, [flags, token]);
+  }, [flags, sector, token, setAssessmentId]);
 
   useEffect(() => {
     if (!token) return;
@@ -73,7 +76,7 @@ export function useAssessmentPersistence() {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(save, 2000);
     return () => clearTimeout(saveTimerRef.current);
-  }, [save, token, flags]);
+  }, [save, token, flags, sector]);
 
   return { assessmentId: assessmentIdRef.current, isHydrating };
 }

@@ -1,4 +1,11 @@
 import * as XLSX from 'xlsx';
+import {
+    detectSpikes,
+    toMonthlyElectricityValues,
+    toMonthlyWaterValues,
+    toMonthlyFuelValues,
+    toMonthlyWasteValues,
+} from '@/utils/validation/detectSpikes';
 
 const MONTH_KEYS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -18,6 +25,79 @@ function monthMatch(cellVal, monthKey) {
     const m = monthKey.toLowerCase();
     if (!s) return false;
     return s.startsWith(m) || s.startsWith(m.slice(0, 3));
+}
+
+const UPLOAD_TS_KEYS = ['uploadedAt', 'UploadedAt', 'upload_timestamp', 'Timestamp', 'timestamp'];
+
+/** @returns {number} epoch ms, or 0 if missing / unparseable */
+function parseUploadedAtMs(row) {
+    if (!row || typeof row !== 'object') return 0;
+    for (const k of UPLOAD_TS_KEYS) {
+        const v = row[k];
+        if (v == null || v === '') continue;
+        const n = Number(v);
+        if (Number.isFinite(n) && n > 40000 && n < 600000) {
+            return (n - 25569) * 86400000;
+        }
+        if (Number.isFinite(n) && n > 1e11) return n;
+        const t = Date.parse(String(v));
+        if (Number.isFinite(t)) return t;
+    }
+    return 0;
+}
+
+/**
+ * @param {object[]} matches — raw sheet rows for the same calendar month
+ * @param {object[]} raw — full raw array (for stable “last in file” ordering)
+ * @returns {{ winner: object|null, duplicatesRemoved: number, keptBy: 'latestTimestamp'|'lastRowInFile'|'single'|'none' }}
+ */
+function resolveDuplicateRawRows(matches, raw) {
+    if (!matches?.length) return { winner: null, duplicatesRemoved: 0, keptBy: 'none' };
+    if (matches.length === 1) return { winner: matches[0], duplicatesRemoved: 0, keptBy: 'single' };
+
+    let bestMs = -1;
+    let anyTs = false;
+    for (const m of matches) {
+        const ms = parseUploadedAtMs(m);
+        if (ms > 0) anyTs = true;
+        if (ms > bestMs) bestMs = ms;
+    }
+    if (anyTs && bestMs > 0) {
+        const candidates = matches.filter((m) => parseUploadedAtMs(m) === bestMs);
+        let tieRow = candidates[0];
+        let tieIdx = -1;
+        for (const m of candidates) {
+            const idx = raw.indexOf(m);
+            if (idx > tieIdx) {
+                tieIdx = idx;
+                tieRow = m;
+            }
+        }
+        return {
+            winner: tieRow,
+            duplicatesRemoved: matches.length - 1,
+            keptBy: 'latestTimestamp',
+        };
+    }
+
+    let bestIdx = -1;
+    let lastRow = matches[0];
+    for (const m of matches) {
+        const idx = raw.indexOf(m);
+        if (idx > bestIdx) {
+            bestIdx = idx;
+            lastRow = m;
+        }
+    }
+    return {
+        winner: lastRow,
+        duplicatesRemoved: matches.length - 1,
+        keptBy: 'lastRowInFile',
+    };
+}
+
+function emptyDuplicateResolution() {
+    return { duplicatesRemoved: 0, months: [], keptDetails: [] };
 }
 
 function findSheet(workbook, name) {
@@ -72,27 +152,66 @@ export async function parseExcelUpload(file, category = 'all') {
     }
 
     const errors = [];
-    const electricityRows = parseElectricitySheet(workbook, errors)
+    const electricityParsed = parseElectricitySheet(workbook, errors);
+    const waterParsed = parseWaterSheet(workbook, errors);
+    const fuelParsed = parseFuelSheet(workbook, errors);
+    const wasteParsed = parseWasteSheet(workbook, errors);
+
+    const parsedCategories = {
+        electricity: {
+            spikeWarnings: detectSpikes(toMonthlyElectricityValues(electricityParsed.rows)),
+            duplicatesRemoved: electricityParsed.duplicateResolution.duplicatesRemoved,
+            months: electricityParsed.duplicateResolution.months,
+            keptDetails: electricityParsed.duplicateResolution.keptDetails,
+        },
+        water: {
+            spikeWarnings: detectSpikes(toMonthlyWaterValues(waterParsed.rows)),
+            duplicatesRemoved: waterParsed.duplicateResolution.duplicatesRemoved,
+            months: waterParsed.duplicateResolution.months,
+            keptDetails: waterParsed.duplicateResolution.keptDetails,
+        },
+        fuel: {
+            spikeWarnings: detectSpikes(toMonthlyFuelValues(fuelParsed.rows)),
+            duplicatesRemoved: fuelParsed.duplicateResolution.duplicatesRemoved,
+            months: fuelParsed.duplicateResolution.months,
+            keptDetails: fuelParsed.duplicateResolution.keptDetails,
+        },
+        waste: {
+            spikeWarnings: detectSpikes(toMonthlyWasteValues(wasteParsed.rows)),
+            duplicatesRemoved: wasteParsed.duplicateResolution.duplicatesRemoved,
+            months: wasteParsed.duplicateResolution.months,
+            keptDetails: wasteParsed.duplicateResolution.keptDetails,
+        },
+    };
+
+    const electricityRows = electricityParsed.rows
         .filter(r => r.elec > 0 || r.ren > 0 || r.diesel > 0 || r.cost > 0);
-    const waterRows = parseWaterSheet(workbook, errors)
+    const waterRows = waterParsed.rows
         .filter(r => r.municipal > 0 || r.tanker > 0 || r.borewell > 0 || r.recycled > 0 || r.totalWater > 0);
-    const fuelRows = parseFuelSheet(workbook, errors)
+    const fuelRows = fuelParsed.rows
         .filter(r => r.fuelDiesel > 0 || r.png > 0 || r.runtime > 0);
-    const wasteRows = parseWasteSheet(workbook, errors)
+    const wasteRows = wasteParsed.rows
         .filter(r => r.wet > 0 || r.dry > 0 || r.biomedical > 0 || r.hazardous > 0 || r.totalWaste > 0);
 
     const filteredErrors = category === 'all'
     ? errors
     : errors.filter(e => e.toLowerCase().includes(category));
 
-return { electricityRows, waterRows, fuelRows, wasteRows, errors: filteredErrors };
+return {
+    electricityRows,
+    waterRows,
+    fuelRows,
+    wasteRows,
+    parsedCategories,
+    errors: filteredErrors,
+};
 }
 
 function parseElectricitySheet(workbook, errors) {
     const sheet = findSheet(workbook, 'electricity');
     if (!sheet) {
         errors.push('Sheet "Electricity" not found — skipping.');
-        return emptyElectricityRows();
+        return { rows: emptyElectricityRows(), duplicateResolution: emptyDuplicateResolution() };
     }
     const raw = XLSX.utils.sheet_to_json(sheet, { defval: 0 });
         // ── RAW XLSX DEBUG ─────────────────────────────────────────
@@ -100,8 +219,26 @@ function parseElectricitySheet(workbook, errors) {
     console.log('RAW first row (all keys):', raw[0]);
     console.log('RAW all keys in first row:', Object.keys(raw[0] ?? {}));
     // ──────────────────────────────────────────────────────────
-    return MONTH_KEYS.map((monthKey) => {
-        const found = raw.find((r) => monthMatch(r.Month ?? r.month, monthKey));
+    let duplicatesRemoved = 0;
+    const dupMonths = [];
+    const keptDetails = [];
+
+    const rows = MONTH_KEYS.map((monthKey) => {
+        const matches = raw.filter((r) => monthMatch(r.Month ?? r.month, monthKey));
+        const { winner, duplicatesRemoved: dr, keptBy } = resolveDuplicateRawRows(matches, raw);
+        if (dr > 0) {
+            duplicatesRemoved += dr;
+            dupMonths.push(monthKey);
+            const e = num(winner, 'Electricity_kWh', 'elec');
+            const r = num(winner, 'Renewable_kWh', 'ren');
+            const d = num(winner, 'Diesel_Litres', 'diesel');
+            const basis = keptBy === 'latestTimestamp' ? 'latest uploadedAt' : 'last row in spreadsheet';
+            keptDetails.push({
+                month: monthKey,
+                summary: `${e} kWh grid, ${r} kWh RE, ${d} L DG — kept (${basis})`,
+            });
+        }
+        const found = winner;
         return {
             month:  monthKey,
             elec:   num(found, 'Electricity_kWh', 'elec'),
@@ -110,17 +247,42 @@ function parseElectricitySheet(workbook, errors) {
             cost:   num(found, 'Cost_INR', 'cost'),
         };
     });
+
+    return {
+        rows,
+        duplicateResolution: { duplicatesRemoved, months: dupMonths, keptDetails },
+    };
 }
 
 function parseWaterSheet(workbook, errors) {
     const sheet = findSheet(workbook, 'water');
     if (!sheet) {
         errors.push('Sheet "Water" not found — skipping.');
-        return emptyWaterRows();
+        return { rows: emptyWaterRows(), duplicateResolution: emptyDuplicateResolution() };
     }
     const raw = XLSX.utils.sheet_to_json(sheet, { defval: 0 });
-    return MONTH_KEYS.map((monthKey) => {
-        const found = raw.find((r) => monthMatch(r.Month ?? r.month, monthKey));
+    let duplicatesRemoved = 0;
+    const dupMonths = [];
+    const keptDetails = [];
+
+    const rows = MONTH_KEYS.map((monthKey) => {
+        const matches = raw.filter((r) => monthMatch(r.Month ?? r.month, monthKey));
+        const { winner, duplicatesRemoved: dr, keptBy } = resolveDuplicateRawRows(matches, raw);
+        if (dr > 0) {
+            duplicatesRemoved += dr;
+            dupMonths.push(monthKey);
+            const municipal = num(winner, 'Municipal_KL', 'municipal');
+            const tanker = num(winner, 'Tanker_KL', 'tanker');
+            const borewell = num(winner, 'Borewell_KL', 'borewell');
+            const recycled = num(winner, 'Recycled_KL', 'recycled');
+            const total = municipal + tanker + borewell + recycled;
+            const basis = keptBy === 'latestTimestamp' ? 'latest uploadedAt' : 'last row in spreadsheet';
+            keptDetails.push({
+                month: monthKey,
+                summary: `Total ${total} KL (mun ${municipal}, tanker ${tanker}, …) — kept (${basis})`,
+            });
+        }
+        const found = winner;
         const municipal = num(found, 'Municipal_KL', 'municipal');
         const tanker = num(found, 'Tanker_KL', 'tanker');
         const borewell = num(found, 'Borewell_KL', 'borewell');
@@ -134,17 +296,39 @@ function parseWaterSheet(workbook, errors) {
             totalWater: municipal + tanker + borewell + recycled,
         };
     });
+
+    return {
+        rows,
+        duplicateResolution: { duplicatesRemoved, months: dupMonths, keptDetails },
+    };
 }
 
 function parseFuelSheet(workbook, errors) {
     const sheet = findSheet(workbook, 'fuel');
     if (!sheet) {
         errors.push('Sheet "Fuel" not found — skipping.');
-        return emptyFuelRows();
+        return { rows: emptyFuelRows(), duplicateResolution: emptyDuplicateResolution() };
     }
     const raw = XLSX.utils.sheet_to_json(sheet, { defval: 0 });
-    return MONTH_KEYS.map((monthKey) => {
-        const found = raw.find((r) => monthMatch(r.Month ?? r.month, monthKey));
+    let duplicatesRemoved = 0;
+    const dupMonths = [];
+    const keptDetails = [];
+
+    const rows = MONTH_KEYS.map((monthKey) => {
+        const matches = raw.filter((r) => monthMatch(r.Month ?? r.month, monthKey));
+        const { winner, duplicatesRemoved: dr, keptBy } = resolveDuplicateRawRows(matches, raw);
+        if (dr > 0) {
+            duplicatesRemoved += dr;
+            dupMonths.push(monthKey);
+            const fd = num(winner, 'Diesel_Litres', 'fuelDiesel');
+            const png = num(winner, 'PNG_kg', 'png');
+            const basis = keptBy === 'latestTimestamp' ? 'latest uploadedAt' : 'last row in spreadsheet';
+            keptDetails.push({
+                month: monthKey,
+                summary: `${fd} L diesel, ${png} kg PNG — kept (${basis})`,
+            });
+        }
+        const found = winner;
         return {
             month:      monthKey,
             fuelDiesel: num(found, 'Diesel_Litres', 'fuelDiesel'),
@@ -152,17 +336,38 @@ function parseFuelSheet(workbook, errors) {
             runtime:    num(found, 'Runtime_Hours', 'runtime'),
         };
     });
+
+    return {
+        rows,
+        duplicateResolution: { duplicatesRemoved, months: dupMonths, keptDetails },
+    };
 }
 
 function parseWasteSheet(workbook, errors) {
     const sheet = findSheet(workbook, 'waste');
     if (!sheet) {
         errors.push('Sheet "Waste" not found — skipping.');
-        return emptyWasteRows();
+        return { rows: emptyWasteRows(), duplicateResolution: emptyDuplicateResolution() };
     }
     const raw = XLSX.utils.sheet_to_json(sheet, { defval: 0 });
-    return MONTH_KEYS.map((monthKey) => {
-        const found = raw.find((r) => monthMatch(r.Month ?? r.month, monthKey));
+    let duplicatesRemoved = 0;
+    const dupMonths = [];
+    const keptDetails = [];
+
+    const rows = MONTH_KEYS.map((monthKey) => {
+        const matches = raw.filter((r) => monthMatch(r.Month ?? r.month, monthKey));
+        const { winner, duplicatesRemoved: dr, keptBy } = resolveDuplicateRawRows(matches, raw);
+        if (dr > 0) {
+            duplicatesRemoved += dr;
+            dupMonths.push(monthKey);
+            const tw = num(winner, 'Total_kg', 'totalWaste');
+            const basis = keptBy === 'latestTimestamp' ? 'latest uploadedAt' : 'last row in spreadsheet';
+            keptDetails.push({
+                month: monthKey,
+                summary: `Total waste ${tw} kg — kept (${basis})`,
+            });
+        }
+        const found = winner;
         return {
             month:      monthKey,
             wet:        num(found, 'Wet_kg', 'wet'),
@@ -172,6 +377,11 @@ function parseWasteSheet(workbook, errors) {
             totalWaste: num(found, 'Total_kg', 'totalWaste'),
         };
     });
+
+    return {
+        rows,
+        duplicateResolution: { duplicatesRemoved, months: dupMonths, keptDetails },
+    };
 }
 
 export default parseExcelUpload;

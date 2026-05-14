@@ -13,6 +13,7 @@ export const INIT_ROWS = MONTHS.map((m, i) => ({
 
 export const INIT_FLAGS = {
     area: 15000,
+    bedCount: '',
     hasLED: true,
     hasBMS: false,
     submetering: false,
