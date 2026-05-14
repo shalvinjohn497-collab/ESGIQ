@@ -113,13 +113,17 @@ function parseWaterSheet(workbook, errors) {
     const raw = XLSX.utils.sheet_to_json(sheet, { defval: 0 });
     return MONTH_KEYS.map((monthKey) => {
         const found = raw.find((r) => monthMatch(r.Month ?? r.month, monthKey));
+        const municipal = num(found, 'Municipal_KL', 'municipal');
+        const tanker = num(found, 'Tanker_KL', 'tanker');
+        const borewell = num(found, 'Borewell_KL', 'borewell');
+        const recycled = num(found, 'Recycled_KL', 'recycled');
         return {
             month:      monthKey,
-            municipal:  num(found, 'Municipal_KL', 'municipal'),
-            tanker:     num(found, 'Tanker_KL', 'tanker'),
-            borewell:   num(found, 'Borewell_KL', 'borewell'),
-            recycled:   num(found, 'Recycled_KL', 'recycled'),
-            totalWater: num(found, 'Total_KL', 'totalWater'),
+            municipal,
+            tanker,
+            borewell,
+            recycled,
+            totalWater: municipal + tanker + borewell + recycled,
         };
     });
 }

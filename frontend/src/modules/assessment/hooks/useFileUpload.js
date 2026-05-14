@@ -1,13 +1,14 @@
 import { useState, useCallback } from 'react';
 import { parseExcelUpload } from '@/utils/parseExcelUpload';
 import useAssessmentStore from '@/modules/assessment/store/assessment.store';
+import { assessmentApi } from '@/services/api/assessment.api';
 
 export function useFileUpload() {
     const [uploading, setUploading] = useState(false);
     const [uploadErrors, setUploadErrors] = useState([]);
     const [lastUploaded, setLastUploaded] = useState(null);
 
-    const { setRows, setWaterRows, setFuelRows, setWasteRows, setUploadStatus } = useAssessmentStore();
+    const { hydrateFromApi } = useAssessmentStore();
 
     const handleFile = useCallback(async (file, category) => {
         if (!file) return;
@@ -55,71 +56,56 @@ export function useFileUpload() {
             console.log('Non-zero waste months       :', nonZeroWaste.length, nonZeroWaste.map(r => r.month));
             console.groupEnd();
 
-            const countMonths = (rows, key) => rows.filter((r) => Number(r[key]) > 0).length;
+            // Find current assessment ID
+            let currentId = null;
+            const latestRes = await assessmentApi.latest();
+            currentId = latestRes.data?.assessment?._id;
+            
+            if (!currentId) {
+                const createRes = await assessmentApi.create({});
+                currentId = createRes.data?.assessment?._id;
+            }
+
+            if (!currentId) throw new Error("Could not find or create assessment for upload.");
+
+            // Upload categories
+            let updatedAssessment = null;
 
             if (category === 'electricity' || category === 'all') {
-                const monthsUploaded = countMonths(electricityRows, 'elec');
-                const statusPayload = { monthsUploaded, source: 'excel', fileName: file.name };
-
-                // ── CHECKPOINT 3: Zustand write — electricity ─────
-                console.group('⚡ Zustand write — electricity');
-                console.log('Rows being set    :', electricityRows);
-                console.log('uploadStatus set  :', statusPayload);
-                console.log('First 3 rows      :', electricityRows.slice(0, 3));
-                console.groupEnd();
-
-                setRows(electricityRows);
-                setUploadStatus('electricity', statusPayload);
+                console.log('⚡ Uploading electricity to API');
+                const res = await assessmentApi.upload(currentId, { category: 'electricity', rows: electricityRows });
+                updatedAssessment = res.data?.assessment;
             }
 
             if (category === 'water' || category === 'all') {
-                const monthsUploaded = countMonths(waterRows, 'totalWater');
-                const statusPayload = { monthsUploaded, source: 'excel', fileName: file.name };
-
-                // ── CHECKPOINT 3: Zustand write — water ──────────
-                console.group('💧 Zustand write — water');
-                console.log('Rows being set    :', waterRows);
-                console.log('uploadStatus set  :', statusPayload);
-                console.groupEnd();
-
-                setWaterRows(waterRows);
-                setUploadStatus('water', statusPayload);
+                console.log('💧 Uploading water to API');
+                const res = await assessmentApi.upload(currentId, { category: 'water', rows: waterRows });
+                updatedAssessment = res.data?.assessment;
             }
 
             if (category === 'fuel' || category === 'all') {
-                const monthsUploaded = countMonths(fuelRows, 'fuelDiesel');
-                const statusPayload = { monthsUploaded, source: 'excel', fileName: file.name };
-
-                // ── CHECKPOINT 3: Zustand write — fuel ───────────
-                console.group('⛽ Zustand write — fuel');
-                console.log('Rows being set    :', fuelRows);
-                console.log('uploadStatus set  :', statusPayload);
-                console.groupEnd();
-
-                setFuelRows(fuelRows);
-                setUploadStatus('fuel', statusPayload);
+                console.log('⛽ Uploading fuel to API');
+                const res = await assessmentApi.upload(currentId, { category: 'fuel', rows: fuelRows });
+                updatedAssessment = res.data?.assessment;
             }
 
             if (category === 'waste' || category === 'all') {
-                const monthsUploaded = countMonths(wasteRows, 'totalWaste');
-                const statusPayload = { monthsUploaded, source: 'excel', fileName: file.name };
-
-                // ── CHECKPOINT 3: Zustand write — waste ──────────
-                console.group('🗑️ Zustand write — waste');
-                console.log('Rows being set    :', wasteRows);
-                console.log('uploadStatus set  :', statusPayload);
-                console.groupEnd();
-
-                setWasteRows(wasteRows);
-                setUploadStatus('waste', statusPayload);
+                console.log('🗑️ Uploading waste to API');
+                const res = await assessmentApi.upload(currentId, { category: 'waste', rows: wasteRows });
+                updatedAssessment = res.data?.assessment;
             }
 
-            // ── CHECKPOINT 4: Final Zustand state snapshot ───────
-            console.group('✅ Upload complete — store state after write');
+            // ── CHECKPOINT 3: Zustand hydration ──────────────────
+            console.group('✅ Upload complete — hydrating store from API response');
             console.log('Category    :', category);
             console.log('File        :', file.name);
             console.log('Timestamp   :', new Date().toISOString());
+            console.log('API Response:', updatedAssessment);
             console.groupEnd();
+
+            if (updatedAssessment) {
+                hydrateFromApi(updatedAssessment);
+            }
 
             setLastUploaded({ category, fileName: file.name, timestamp: Date.now() });
             if (errors.length > 0) setUploadErrors(errors);
@@ -135,7 +121,7 @@ export function useFileUpload() {
         } finally {
             setUploading(false);
         }
-    }, [setRows, setWaterRows, setFuelRows, setWasteRows, setUploadStatus]);
+    }, [hydrateFromApi]);
 
     return { handleFile, uploading, uploadErrors, lastUploaded };
 }

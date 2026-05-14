@@ -1,8 +1,9 @@
 import 'dotenv/config'
 import mongoose from 'mongoose'
 import { createApp } from './app.js'
+import cors from 'cors';
 
-const PORT     = process.env.PORT     || 5000
+const PORT     = process.env.PORT     || 3002
 const MONGO_URI = process.env.MONGO_URI
 
 if (!MONGO_URI) {

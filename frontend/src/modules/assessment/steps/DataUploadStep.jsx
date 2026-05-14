@@ -52,7 +52,7 @@ export default function DataUploadStep() {
             </div>
 
             {/* Upload Cards */}
-           <div className="grid gap-6 mb-10" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
+            <div className="grid gap-6 mb-10" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
                 {UPLOAD_CATEGORIES.map((cat) => (
                     <PremiumUploadCard
                         key={cat.id}
@@ -160,25 +160,25 @@ export default function DataUploadStep() {
             </PremiumCard>
 
             {/* CTA */}
-           <div style={{
-    position: 'sticky',
-    bottom: 0,
-    background: 'rgba(248,250,252,0.95)',
-    backdropFilter: 'blur(8px)',
-    borderTop: '1px solid #e2e8f0',
-    padding: '16px 0',
-    display: 'flex',
-    justifyContent: 'flex-end',
-    zIndex: 10,
-    marginTop: 32,
-  }}>
-    <button
-      onClick={() => navigate(ROUTES.ASSESSMENT_SUMMARY)}
-      className="px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold text-sm transition-all shadow-sm"
-    >
-      Continue to Validation →
-    </button>
-  </div>
+            <div style={{
+                position: 'sticky',
+                bottom: 0,
+                background: 'rgba(248,250,252,0.95)',
+                backdropFilter: 'blur(8px)',
+                borderTop: '1px solid #e2e8f0',
+                padding: '16px 0',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                zIndex: 10,
+                marginTop: 32,
+            }}>
+                <button
+                    onClick={() => navigate(ROUTES.ASSESSMENT_SUMMARY)}
+                    className="px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold text-sm transition-all shadow-sm"
+                >
+                    Continue to Validation →
+                </button>
+            </div>
         </PageShell>
     );
 }

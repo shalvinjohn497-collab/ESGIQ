@@ -45,6 +45,15 @@ const useAssessmentStore = create((set) => ({
             uploadStatus: { ...s.uploadStatus, [category]: status },
         })),
 
+    hydrateFromApi: (data) => set((s) => ({
+        rows: data.rows?.length ? data.rows : s.rows,
+        waterRows: data.waterRows?.length ? data.waterRows : s.waterRows,
+        fuelRows: data.fuelRows?.length ? data.fuelRows : s.fuelRows,
+        wasteRows: data.wasteRows?.length ? data.wasteRows : s.wasteRows,
+        flags: data.flags && Object.keys(data.flags).length ? data.flags : s.flags,
+        uploadStatus: data.uploadStatus || s.uploadStatus,
+    })),
+
     resetAssessment: () =>
         set({
             step: 1,

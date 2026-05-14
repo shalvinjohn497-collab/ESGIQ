@@ -54,7 +54,26 @@ const AssessmentSchema = new mongoose.Schema({
   waterRows: { type: [WaterRowSchema], default: [] },
   fuelRows:  { type: [FuelRowSchema],  default: [] },
   wasteRows: { type: [WasteRowSchema], default: [] },
+  // New fields as requested
+  scores:            { type: mongoose.Schema.Types.Mixed, default: {} },
+  emissions:         { type: mongoose.Schema.Types.Mixed, default: {} },
+  benchmarks:        { type: mongoose.Schema.Types.Mixed, default: {} },
+  confidence:        { type: mongoose.Schema.Types.Mixed, default: {} },
+  certifications:    { type: [mongoose.Schema.Types.Mixed], default: [] },
+  strengths:         { type: [mongoose.Schema.Types.Mixed], default: [] },
+  gaps:              { type: [mongoose.Schema.Types.Mixed], default: [] },
+  roadmap:           { type: [mongoose.Schema.Types.Mixed], default: [] },
+  generatedReports:  { type: [mongoose.Schema.Types.Mixed], default: [] },
   flags:        { type: mongoose.Schema.Types.Mixed, default: {} },
   uploadStatus: { type: mongoose.Schema.Types.Mixed, default: {} },
 }, { timestamps: true });
+
+// Set runValidators: false as default for findOneAndUpdate
+AssessmentSchema.pre('findOneAndUpdate', function(next) {
+  if (this.options.runValidators === undefined) {
+    this.options.runValidators = false;
+  }
+  next();
+});
+
 export default mongoose.model('Assessment', AssessmentSchema);

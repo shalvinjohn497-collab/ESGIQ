@@ -7,6 +7,9 @@ export const assessmentApi = {
   getOne:  (id)      => client.get(`/assessments/${id}`),
   create:  (data)    => client.post('/assessments', data),
   update:  (id,data) => client.put(`/assessments/${id}`, data),
+  upload:  (id,data) => client.put(`/assessments/${id}/upload`, data),
+  uploadCategory: (id, category, rows) => client.put(`/assessments/${id}/upload`, { category, rows }),
+  saveGovernance: (id, flags) => client.put(`/assessments/${id}/governance`, { flags }),
   remove:  (id)      => client.delete(`/assessments/${id}`),
 };
 
