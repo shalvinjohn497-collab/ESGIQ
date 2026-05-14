@@ -66,6 +66,22 @@ const AssessmentSchema = new mongoose.Schema({
   generatedReports:  { type: [mongoose.Schema.Types.Mixed], default: [] },
   flags:        { type: mongoose.Schema.Types.Mixed, default: {} },
   uploadStatus: { type: mongoose.Schema.Types.Mixed, default: {} },
+  results: {
+    type: new mongoose.Schema({
+      overallScore: { type: Number },
+      readinessStage: { type: String },
+      categoryScores: { type: mongoose.Schema.Types.Mixed },
+      emissionsData: { type: mongoose.Schema.Types.Mixed },
+      certificationResults: { type: mongoose.Schema.Types.Mixed },
+      regulatoryResults: { type: mongoose.Schema.Types.Mixed },
+      strengthsAndGaps: { type: mongoose.Schema.Types.Mixed },
+      computedAt: { type: Date, default: Date.now }
+    }, { _id: false }),
+    default: null
+  },
+  pdfPath: { type: String, default: null },
+  pdfGeneratedAt: { type: Date, default: null },
+  pdfExpiresAt: { type: Date, default: null },
 }, { timestamps: true });
 
 // Set runValidators: false as default for findOneAndUpdate

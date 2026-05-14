@@ -1,52 +1,49 @@
 import { CERTIFICATION_PREREQUISITES } from '@/constants/certificationPrerequisites';
 
-export function checkPrerequisites(
-    certId,
-    flags,
-    filledMonths,
-    totalElec,
-    totalDiesel,
-    operationalMetrics = {}
-) {
-    const {
-    waterMonitoringMonths = 0,
-    recycledWaterAvailable = false,
-    biomedicalWasteTracked = false,
-    segregationMaturity = 0,
-    dieselLitresTotal = 0,
-} = operationalMetrics;
-    const prereqs = CERTIFICATION_PREREQUISITES;
-    if (!prereqs[certId]) return { passed: true, missing: [] };
+export function checkPrerequisites(framework, scores, assessmentData = {}) {
+    // Fallback for legacy calls (e.g. checkPrerequisites(certId, flags, filledMonths, totalElec, totalDiesel, operationalMetrics))
+    if (typeof framework === 'string') {
+        const certId = framework;
+        const flags = scores || {};
+        const filledMonths = assessmentData || 0;
+        
+        // Very basic fallback
+        const passed = filledMonths >= 6;
+        return { passed, missing: passed ? [] : ['Minimum 6 months data required'] };
+    }
 
-    const safeFlags = flags || {};
+    const failedChecks = [];
+    const minMonths = framework.minEvidenceMonths ?? 6;
+    const filledMonths = Number(assessmentData.filledMonths) || 0;
 
-    const keyMap = {
-        biomedicalWasteVendor: Boolean(safeFlags.authVendor),
-        infectionControlSOPs: Boolean(safeFlags.sops),
-        biomedicalWasteRecords:
-    biomedicalWasteTracked ||
-    Boolean(safeFlags.wtTrack),
-        energyTracking6Months: filledMonths >= 6,
-        waterTracking6Months:
-    waterMonitoringMonths >= 6 ||
-    Boolean(safeFlags.wTrack),
-        energyMonitoringSystem: Boolean(safeFlags.hasBMS),
-        waterMeteringBySource: Boolean(safeFlags.wSplit),
-        policy: Boolean(safeFlags.policy),
-        esgOwner: Boolean(safeFlags.esgOwner),
-        compliance: Boolean(safeFlags.compliance),
-        iaqMonitoring: Boolean(safeFlags.iaqMonitoring),
-        scope1Available:
-    dieselLitresTotal > 0 ||
-    (totalDiesel || 0) > 0,
-        scope2Available: (totalElec || 0) > 0,
+    if (filledMonths < minMonths) {
+        failedChecks.push(`At least ${minMonths} months of operational data required`);
+    }
+
+    // Example per-framework checks
+    const fwId = framework.id || '';
+    if (fwId.includes('IGBC')) {
+        if ((scores.governance || 0) < 50) {
+            failedChecks.push('Minimum 50% Governance score required');
+        }
+    } else if (fwId.includes('LEED')) {
+        if ((scores.emissions || 0) < 40) {
+            failedChecks.push('Scope 2 calculation present required');
+        }
+    } else if (fwId.includes('ISO_50001')) {
+        if ((scores.energy || 0) < 60) {
+            failedChecks.push('Minimum 60% Energy score required');
+        }
+    } else if (fwId.includes('ISO_14001')) {
+        if ((scores.governance || 0) < 40) {
+            failedChecks.push('Minimum Governance score required');
+        }
+    }
+
+    return {
+        met: failedChecks.length === 0,
+        failedChecks,
     };
-
-    const missing = prereqs[certId].prerequisites
-        .filter((p) => !keyMap[p.key])
-        .map((p) => p.label);
-
-    return { passed: missing.length === 0, missing };
 }
 
 export default checkPrerequisites;

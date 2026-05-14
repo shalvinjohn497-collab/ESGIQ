@@ -1,9 +1,10 @@
 import { SCORING_WEIGHTS } from '@/constants/scoring';
 
 /**
- * Calculate overall ESG score from individual category scores
- * @param {Object} scores - { energy, water, waste, governance }
- * @returns {number} overall score 0–100
+ * Weighted overall ESG score (0–100) from pillar scores only.
+ *
+ * BRD §12 strength/gap insights are evaluated separately in `evaluateInsights` once extended
+ * `scores`, benchmarks, and `categoryData` exist — see `useAssessmentResults` (orchestrator).
  */
 export function calculateOverallScore({ energy, water, waste, governance }) {
     return Math.round(

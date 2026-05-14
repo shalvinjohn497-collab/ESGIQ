@@ -6,8 +6,10 @@ import { useModuleValidation } from '@/modules/assessment/hooks/useModuleValidat
 import useAssessmentStore from '@/modules/assessment/store/assessment.store';
 import { useAssessmentResults } from '@/modules/assessment/hooks/useAssessmentResults';
 import { ROUTES } from '@/constants/routes';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { assessmentApi } from '@/services/api/assessment.api';
+import { useDownloadPdf } from '@/modules/assessment/hooks/useDownloadPdf';
+import { useToast } from '@/hooks/useToast';
 import { UPLOAD_CATEGORIES } from '@/modules/assessment/configs/energy.module.jsx';
 import { STATUS, STATUS_LABELS } from '@/constants/uploadCategoryStatus';
 import { assignBenchmarkStatus } from '@/calculations/scoring/assignBenchmarkStatus';
@@ -62,6 +64,7 @@ const KPI_BENCHMARK_BADGE_CLASS = {
 
 export default function SummaryStep() {
     const navigate = useNavigate();
+    const { showToast } = useToast();
     const results = useAssessmentResults();
     const resolvedScores = results.scores;
     const categoryUploadStatuses = results.categoryUploadStatuses;
@@ -74,7 +77,7 @@ export default function SummaryStep() {
   readiness: resolvedScores?.overall || 78,
 };
     // Reads flags/navigation from store
-    const { flags, assessmentId, rows, waterRows, fuelRows, wasteRows, uploadDuplicateResolution } =
+    const { flags, assessmentId, rows, waterRows, fuelRows, wasteRows, uploadDuplicateResolution, uploadStatus } =
         useAssessmentStore();
     const { validations } = useModuleValidation(resolvedScores);
 
@@ -97,14 +100,17 @@ export default function SummaryStep() {
     }, [categoryUploadStatuses]);
 
     const annElec = results.annualizedElec;
+    const elecAnnualBlocked = results.electricityAnnualizationBlocked;
 
     const kpis = useMemo(() => {
         const intensity = Number(resolvedScores.intensity) || 0;
         const area = Number(flags.area) || 10000;
         const filledWM = Number(resolvedScores.filledWaterMonths) || 0;
         const tw = Number(resolvedScores.totalWater) || 0;
+        const waterBlocked = Boolean(results.waterAnnualizationBlocked);
         const waterIntensity =
-            filledWM > 0 && area > 0 ? (tw / filledWM) * 12 / area : 0;
+            waterBlocked ? null
+            : filledWM > 0 && area > 0 ? (tw / filledWM) * 12 / area : 0;
         const renPct = Number(resolvedScores.renPct) || 0;
         const recyclingPct =
             Number(results.operationalMetrics?.recyclingPct) ||
@@ -121,10 +127,12 @@ export default function SummaryStep() {
             },
             {
                 l: 'Water Intensity',
-                v: waterIntensity.toFixed(2),
+                v: waterIntensity == null ? '—' : waterIntensity.toFixed(2),
                 u: 'KL/sqft/yr',
                 b: 'Bench: 0.20–0.35',
-                ...assignBenchmarkStatus(waterIntensity, 0.2, 0.35, { lowerIsBetter: true }),
+                ...(waterIntensity == null
+                    ? { label: 'N/A', colour: 'red' }
+                    : assignBenchmarkStatus(waterIntensity, 0.2, 0.35, { lowerIsBetter: true })),
             },
             {
                 l: 'Renewable Energy',
@@ -141,7 +149,7 @@ export default function SummaryStep() {
                 ...assignBenchmarkStatus(recyclingPct, 60, 100, { lowerIsBetter: false }),
             },
         ];
-    }, [resolvedScores, flags.area, flags.recyclingPct, results.operationalMetrics]);
+    }, [resolvedScores, flags.area, flags.recyclingPct, results.operationalMetrics, results.waterAnnualizationBlocked]);
 
     const spikeWarningsByCategory = useMemo(
         () => ({
@@ -153,10 +161,25 @@ export default function SummaryStep() {
         [rows, waterRows, fuelRows, wasteRows]
     );
 
+    const unitMismatchByCategory = useMemo(() => {
+        const out = {};
+        for (const id of ['electricity', 'water', 'fuel', 'waste']) {
+            const u = uploadStatus?.[id];
+            if (u?.unitMismatch) {
+                out[id] = { unitMismatch: true, foundUnits: u.foundUnits || [] };
+            }
+        }
+        return Object.keys(out).length ? out : null;
+    }, [uploadStatus]);
+
      useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
     const [saving, setSaving] = useState(false);
+
+    const onPdfSuccess = useCallback(() => showToast('PDF downloaded successfully.', 'success'), [showToast]);
+    const onPdfError = useCallback(() => showToast('PDF generation failed. Please try again.', 'error'), [showToast]);
+    const { downloadPdf, isGenerating: isPdfGenerating } = useDownloadPdf({ onSuccess: onPdfSuccess, onError: onPdfError });
 
     const handleContinue = async () => {
         setSaving(true);
@@ -196,6 +219,8 @@ export default function SummaryStep() {
         }}
         spikeWarningsByCategory={spikeWarningsByCategory}
         duplicateNoticesByCategory={uploadDuplicateResolution}
+        unitMismatchByCategory={unitMismatchByCategory}
+        consistencyWarnings={results.consistencyWarnings ?? []}
       />
 
       {/* Upload Overview */}
@@ -292,8 +317,10 @@ export default function SummaryStep() {
             [
               'Electricity (kWh)',
               resolvedScores.totalElec.toLocaleString(),
-              annElec.toLocaleString(),
-              resolvedScores.filled < 12
+              elecAnnualBlocked ? '—' : annElec.toLocaleString(),
+              elecAnnualBlocked
+                ? 'Blocked (data error)'
+                : resolvedScores.filled < 12
                 ? `÷${resolvedScores.filled}×12`
                 : 'Actual',
             ],
@@ -406,23 +433,42 @@ export default function SummaryStep() {
     >
       ← Back
     </button>
+    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+    <button
+      onClick={downloadPdf}
+      disabled={isPdfGenerating}
+      style={{
+        padding: '12px 24px',
+        background: isPdfGenerating ? '#94a3b8' : '#1e293b',
+        border: 'none',
+        borderRadius: 16,
+        fontWeight: 600,
+        fontSize: 14,
+        color: '#ffffff',
+        cursor: isPdfGenerating ? 'not-allowed' : 'pointer',
+        transition: 'background 0.2s',
+      }}
+    >
+      {isPdfGenerating ? 'Generating…' : '📄 Download PDF'}
+    </button>
     <button
       onClick={handleContinue}
-      disabled={saving}
+      disabled={saving || results.hasBlockingConsistencyErrors}
       style={{
         padding: '12px 28px',
-        background: saving ? '#6ee7b7' : '#059669',
+        background: saving || results.hasBlockingConsistencyErrors ? '#94a3b8' : '#059669',
         border: 'none',
         borderRadius: 16,
         fontWeight: 700,
         fontSize: 14,
         color: '#ffffff',
-        cursor: saving ? 'not-allowed' : 'pointer',
+        cursor: saving || results.hasBlockingConsistencyErrors ? 'not-allowed' : 'pointer',
         transition: 'background 0.2s',
       }}
     >
-      {saving ? 'Saving…' : 'Continue to Readiness →'}
+      {saving ? 'Saving…' : results.hasBlockingConsistencyErrors ? 'Resolve blocking checks →' : 'Continue to Readiness →'}
     </button>
+    </div>
   </div>
 
     </div>

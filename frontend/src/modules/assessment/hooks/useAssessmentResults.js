@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import useAssessmentStore from '@/modules/assessment/store/assessment.store';
 import { applyAnnualization } from '@/calculations/scoring/applyAnnualization';
 import { applyConfidenceModifier } from '@/calculations/scoring/applyConfidenceModifier';
 import { calculateEnergyScore } from '@/calculations/energy/calculateEnergyScore';
@@ -17,9 +16,12 @@ import { calculateScope2 } from '@/calculations/emissions/calculateScope2';
 import { calculateScope3 } from '@/calculations/emissions/calculateScope3';
 import { calculateTotalEmissions } from '@/calculations/emissions/calculateTotalEmissions';
 import { calculateOverallScore } from '@/calculations/scoring/calculateOverallScore';
-import { determineCertificationLevel } from '@/calculations/scoring/determineCertificationLevel';
+import { determineCertificationLevel, mapTierToLegacyDisplay, certificationTierFromOverall } from '@/calculations/scoring/determineCertificationLevel';
+import { filterApplicableFrameworks } from '@/calculations/certifications/filterApplicableFrameworks';
 import { getConfidenceModifier } from '@/constants/confidenceModifiers';
+import { STATUS } from '@/constants/uploadCategoryStatus';
 import { calculateAllCertifications } from '@/calculations/certifications';
+import { evaluateRegulatoryReadiness } from '@/calculations/regulatory/evaluateRegulatoryReadiness';
 import useAuthStore from '@/store/auth.store';
 import { DEFAULT_SECTOR } from '@/constants/sectors';
 import {
@@ -27,6 +29,8 @@ import {
   deriveWaterMetrics,
   deriveWasteMetrics,
 } from '@/calculations/derived';
+import { runCrossCategoryConsistencyChecks } from '@/utils/validation/crossCategoryChecks';
+import { evaluateInsights, DEFAULT_BENCHMARKS } from '@/calculations/insights/evaluateInsights';
 
 export function useAssessmentResults() {
     const { rows, flags } = useAssessmentStore();
@@ -75,8 +79,34 @@ export function useAssessmentResults() {
     };
     console.log('Operational Metrics:', operationalMetrics);
 
+        const consistencyWarnings = runCrossCategoryConsistencyChecks({
+            electricityRows: rows,
+            wasteRows,
+            flags,
+            refrigerantData: flags?.refrigerantData,
+        });
+        const hasBlockingConsistencyErrors = consistencyWarnings.some((w) => w.severity === 'error');
 
-        const { annualizedValue: annualizedElec, isValid: isDataValid } = applyAnnualization(totalElec, filledMonths);
+        const categoryUploadStatuses = buildCategoryUploadStatuses({
+            rows,
+            waterRows,
+            fuelRows,
+            wasteRows,
+            uploadStatus,
+        });
+
+        const blockAnnualizationForCategory = (catId) =>
+            categoryUploadStatuses[catId]?.status === STATUS.ERROR;
+
+        let annualizedElecResult = applyAnnualization(totalElec, filledMonths);
+        if (blockAnnualizationForCategory('electricity') || hasBlockingConsistencyErrors) {
+            annualizedElecResult = {
+                annualizedValue: 0,
+                isValid: false,
+                isEstimated: false,
+            };
+        }
+        const { annualizedValue: annualizedElec, isValid: isDataValid } = annualizedElecResult;
         const renewablePercent = calculateRenewableShare(totalRen, totalElec);
         const intensity = calculateIntensity(totalElec, area);
         const baseEnergyScore = calculateEnergyScore({
@@ -117,16 +147,45 @@ console.log('Certification Results:', certificationResults);
         const scope3 = calculateScope3(wasteToLandfill, totalWater);
         const totalEmissions = calculateTotalEmissions(scope1, scope2, scope3);
 
-        const { level: certLevel, color: certColor, ringColor } = determineCertificationLevel(overall);
-        const confidenceModifier = getConfidenceModifier(filledMonths);
+        const emissionsPillarScore = Math.max(0, 100 - Math.round(totalEmissions / 1.5));
 
-        const categoryUploadStatuses = buildCategoryUploadStatuses({
-            rows,
-            waterRows,
-            fuelRows,
-            wasteRows,
-            uploadStatus,
+        const categoryScoresForCertification = {
+            energy,
+            water,
+            waste,
+            governance: gov,
+            emissions: emissionsPillarScore,
+        };
+
+        const applicableFrameworks = filterApplicableFrameworks(sector);
+        const certificationByFramework = applicableFrameworks.map((fw) =>
+            determineCertificationLevel(categoryScoresForCertification, fw, {
+                filledMonths,
+            }),
+        );
+        
+        const country = flags?.country || 'IN';
+        const regulatoryResults = evaluateRegulatoryReadiness(sector, country, categoryScoresForCertification, {
+            filledMonths,
+            ...operationalMetrics,
         });
+
+        let certLevel;
+        let certColor;
+        let ringColor;
+        if (certificationByFramework.length > 0) {
+            const disp = mapTierToLegacyDisplay(certificationByFramework[0].tier);
+            certLevel = disp.level;
+            certColor = disp.color;
+            ringColor = disp.ringColor;
+        } else {
+            const disp = certificationTierFromOverall(overall);
+            certLevel = disp.level;
+            certColor = disp.color;
+            ringColor = disp.ringColor;
+        }
+
+        const confidenceModifier = getConfidenceModifier(filledMonths);
 
         const scores = {
             energy,
@@ -155,6 +214,43 @@ console.log('Certification Results:', certificationResults);
             ringC: ringColor,
         };
 
+        const waterIntensityKlPerSqftYr =
+            filledWaterMonths > 0 && area > 0
+                ? (totalWater / filledWaterMonths) * 12 / area
+                : 0;
+
+        const insightCategoryData = {
+            flags,
+            operationalMetrics,
+            certificationResults,
+            filledMonths,
+            filledWaterMonths,
+            filledWasteMonths,
+            waterIntensityKlPerSqftYr,
+        };
+
+        const insightEvaluation = evaluateInsights({
+            scores,
+            benchmarks: DEFAULT_BENCHMARKS,
+            categoryData: insightCategoryData,
+        });
+
+        if (typeof queueMicrotask === 'function') {
+            queueMicrotask(() => {
+                const st = useAssessmentStore.getState();
+                st.setInsights(insightEvaluation);
+                st.setCertificationByFramework(certificationByFramework);
+                st.setRegulatoryResults(regulatoryResults);
+            });
+        } else {
+            setTimeout(() => {
+                const st = useAssessmentStore.getState();
+                st.setInsights(insightEvaluation);
+                st.setCertificationByFramework(certificationByFramework);
+                st.setRegulatoryResults(regulatoryResults);
+            }, 0);
+        }
+
         const radarData = [
             { subject: 'Energy', val: energy, full: 100 },
             { subject: 'Water', val: water, full: 100 },
@@ -167,6 +263,16 @@ console.log('Certification Results:', certificationResults);
     scores,
     annualizedElec,
     isDataValid,
+    electricityAnnualizationBlocked:
+        blockAnnualizationForCategory('electricity') || hasBlockingConsistencyErrors,
+    waterAnnualizationBlocked:
+        blockAnnualizationForCategory('water') || hasBlockingConsistencyErrors,
+    fuelAnnualizationBlocked:
+        blockAnnualizationForCategory('fuel') || hasBlockingConsistencyErrors,
+    wasteAnnualizationBlocked:
+        blockAnnualizationForCategory('waste') || hasBlockingConsistencyErrors,
+    consistencyWarnings,
+    hasBlockingConsistencyErrors,
     readinessLabel,
     ringColor,
     certLevel,
@@ -180,6 +286,9 @@ console.log('Certification Results:', certificationResults);
 
     operationalMetrics,
     categoryUploadStatuses,
+    insightEvaluation,
+    certificationByFramework,
+    regulatoryResults,
 };
     }, [rows, flags, assessmentSector, authSector, waterRows, fuelRows, wasteRows, uploadStatus]);
 }

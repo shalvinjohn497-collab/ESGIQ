@@ -30,6 +30,14 @@ const useAssessmentStore = create((set) => ({
         fuel: null,
         waste: null,
     },
+    consistencyWarnings: [],
+
+    insights: {
+        strengths: [],
+        gaps: [],
+    },
+    certificationByFramework: [],
+    regulatoryResults: [],
 
     setStep: (step) => set({ step }),
     nextStep: () => set((s) => ({ step: Math.min(s.step + 1, 3) })),
@@ -65,6 +73,31 @@ const useAssessmentStore = create((set) => ({
             uploadDuplicateResolution: { ...s.uploadDuplicateResolution, ...partial },
         })),
 
+    setConsistencyWarnings: (consistencyWarnings) =>
+        set({
+            consistencyWarnings: Array.isArray(consistencyWarnings) ? [...consistencyWarnings] : [],
+        }),
+
+    setInsights: (payload) =>
+        set({
+            insights: {
+                strengths: Array.isArray(payload?.strengths) ? [...payload.strengths] : [],
+                gaps: Array.isArray(payload?.gaps) ? [...payload.gaps] : [],
+            },
+        }),
+
+    setCertificationByFramework: (certificationByFramework) =>
+        set({
+            certificationByFramework: Array.isArray(certificationByFramework)
+                ? [...certificationByFramework]
+                : [],
+        }),
+
+    setRegulatoryResults: (regulatoryResults) =>
+        set({
+            regulatoryResults: Array.isArray(regulatoryResults) ? [...regulatoryResults] : [],
+        }),
+
     hydrateFromApi: (data) => set((s) => ({
         rows: data.rows?.length ? data.rows : s.rows,
         waterRows: data.waterRows?.length ? data.waterRows : s.waterRows,
@@ -79,6 +112,22 @@ const useAssessmentStore = create((set) => ({
             data.uploadDuplicateResolution && typeof data.uploadDuplicateResolution === 'object'
                 ? { ...s.uploadDuplicateResolution, ...data.uploadDuplicateResolution }
                 : s.uploadDuplicateResolution,
+        consistencyWarnings: Array.isArray(data.consistencyWarnings)
+            ? [...data.consistencyWarnings]
+            : s.consistencyWarnings,
+        insights:
+            data.insights && typeof data.insights === 'object'
+                ? {
+                      strengths: Array.isArray(data.insights.strengths) ? [...data.insights.strengths] : [],
+                      gaps: Array.isArray(data.insights.gaps) ? [...data.insights.gaps] : [],
+                  }
+                : s.insights,
+        certificationByFramework: Array.isArray(data.certificationByFramework)
+            ? [...data.certificationByFramework]
+            : s.certificationByFramework,
+        regulatoryResults: Array.isArray(data.regulatoryResults)
+            ? [...data.regulatoryResults]
+            : s.regulatoryResults,
     })),
 
     resetAssessment: () =>
@@ -104,6 +153,10 @@ const useAssessmentStore = create((set) => ({
                 fuel: null,
                 waste: null,
             },
+            consistencyWarnings: [],
+            insights: { strengths: [], gaps: [] },
+            certificationByFramework: [],
+            regulatoryResults: [],
         }),
 }));
 

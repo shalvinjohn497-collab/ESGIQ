@@ -8,7 +8,12 @@ import { calculateScope3 } from '@/calculations/emissions/calculateScope3';
 import { calculateTotalEmissions } from '@/calculations/emissions/calculateTotalEmissions';
 import { calculateOverallScore } from '@/calculations/scoring/calculateOverallScore';
 import { calculateWaterScore, calculateWasteScore, calculateGovernanceScore } from '@/calculations/scoring/calculateReadiness';
-import { determineCertificationLevel } from '@/calculations/scoring/determineCertificationLevel';
+import {
+    determineCertificationLevel,
+    mapTierToLegacyDisplay,
+    certificationTierFromOverall,
+} from '@/calculations/scoring/determineCertificationLevel';
+import { filterApplicableFrameworks } from '@/calculations/certifications/filterApplicableFrameworks';
 
 /**
  * Hook that computes all ESG scores from rows and flags
@@ -35,8 +40,24 @@ export function useAssessmentScoring(rows, flags, sector = 'GEN') {
         const scope2 = calculateScope2(totalElec);
         const scope3 = calculateScope3(scope2);
         const totalEm = calculateTotalEmissions(scope1, scope2, scope3);
+        const emissionsPillar = Math.max(0, 100 - Math.round(totalEm / 1.5));
 
-        const { level: lv, color: lvC, ringColor: ringC } = determineCertificationLevel(overall);
+        const categoryScoresForCertification = {
+            energy,
+            water,
+            waste,
+            governance: gov,
+            emissions: emissionsPillar,
+        };
+        const applicableFrameworks = filterApplicableFrameworks(sector);
+        const primaryCert = applicableFrameworks[0]
+            ? determineCertificationLevel(categoryScoresForCertification, applicableFrameworks[0], {
+                  filledMonths: filled,
+              })
+            : null;
+        const { level: lv, color: lvC, ringColor: ringC } = primaryCert
+            ? mapTierToLegacyDisplay(primaryCert.tier)
+            : certificationTierFromOverall(overall);
 
         return {
             energy, water, waste, gov, overall,

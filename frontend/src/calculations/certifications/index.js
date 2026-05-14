@@ -4,3 +4,4 @@ export { checkPrerequisites } from './checkPrerequisites';
 export { applyPrerequisiteCap } from './applyPrerequisiteCap';
 export { getReadinessStatus } from './getReadinessStatus';
 export { getTimeline } from './getTimeline';
+export { filterApplicableFrameworks, normalizeSectorCode } from './filterApplicableFrameworks';

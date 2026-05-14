@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { generateInsights } from '@/utils/generateInsights';
+import useAssessmentStore from '@/modules/assessment/store/assessment.store';
 import { C } from '@/theme/colors';
 import { Minus, TrendingUp, AlertTriangle } from 'lucide-react';
 
@@ -21,7 +21,28 @@ const itemVariants = {
 };
 
 export default function ESGAnalystPanel({ scores }) {
-    const insights = useMemo(() => generateInsights(scores), [scores]);
+    const insightsPayload = useAssessmentStore((s) => s.insights);
+
+    const insights = useMemo(() => {
+        const out = [];
+        const strengths = insightsPayload?.strengths || [];
+        const gaps = insightsPayload?.gaps || [];
+        strengths.forEach((st) => {
+            out.push({ id: st.id, text: st.insight, severity: 'positive' });
+        });
+        gaps.forEach((g) => {
+            const severity = g.severity === 'High' ? 'warning' : 'neutral';
+            out.push({ id: g.id, text: g.gap, severity });
+        });
+        if (out.length === 0) {
+            out.push({
+                id: 'insights-placeholder',
+                text: 'Complete an assessment upload to populate BRD §12 strength and gap insights.',
+                severity: 'neutral',
+            });
+        }
+        return out;
+    }, [insightsPayload]);
 
     return (
         <div className="mb-8">
