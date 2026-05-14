@@ -1,6 +1,6 @@
 
-import { useRef, useState } from 'react';
-import { Upload, CheckCircle2, AlertCircle, Loader, ChevronDown, FileSpreadsheet, X } from 'lucide-react';
+import { useRef } from 'react';
+import { Upload, CheckCircle2, AlertCircle, Loader, FileSpreadsheet, X } from 'lucide-react';
 import { useFileUpload } from '@/modules/assessment/hooks/useFileUpload';
 import useAssessmentStore from '@/modules/assessment/store/assessment.store';
 
@@ -8,7 +8,6 @@ export const PremiumUploadCard = ({ title, icon: Icon, categoryId }) => {
   const fileInputRef = useRef(null);
   const { handleFile, uploading, uploadErrors, lastUploaded } = useFileUpload();
   const uploadStatus = useAssessmentStore((s) => s.uploadStatus);
-  const [expanded, setExpanded] = useState(false);
 
   const status = uploadStatus?.[categoryId];
   const monthsUploaded = status?.monthsUploaded ?? 0;
@@ -85,66 +84,38 @@ export const PremiumUploadCard = ({ title, icon: Icon, categoryId }) => {
         </div>
 
         {/* Footer row */}
-        <div className="flex items-center justify-between pt-3 border-t border-slate-50">
+        <div className="flex items-center gap-1.5 pt-3 border-t border-slate-100">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
           <div className="text-xs font-medium text-slate-400">
             <span className="text-slate-900 font-bold">{monthsUploaded}</span>/12 months
             {isExcel && <span className="ml-2 text-emerald-600 font-bold">· Excel</span>}
           </div>
-
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-slate-900 transition-colors"
-          >
-            {expanded ? 'Close' : 'Manage'}
-            <ChevronDown
-              className="w-3.5 h-3.5 transition-transform"
-              style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
-            />
-          </button>
         </div>
       </div>
 
-      {/* Expand Panel */}
-      {expanded && (
-        <div className="border-t border-slate-100 bg-slate-50/50 p-5 space-y-3">
+      {/* Action Footer */}
+      <div className="border-t border-slate-100 bg-slate-50/50 px-4 py-3 flex items-center justify-between gap-2">
+        {/* Download Template */}
+        <button
+          onClick={downloadTemplate}
+          className="flex items-center justify-between gap-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 px-3 py-2 rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-colors"
+        >
+          <FileSpreadsheet className="w-8 h-4 text-emerald-600" />
+          Template
+        </button>
 
-          {/* Error display */}
-          {uploadErrors?.length > 0 && (
-            <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-xs text-amber-700">
-              {uploadErrors[0]}
-            </div>
-          )}
-
-          {/* Success message */}
-          {isExcel && lastUploaded?.category === categoryId && (
-            <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-xs text-emerald-700 font-medium">
-              ✓ {lastUploaded.fileName} uploaded — {monthsUploaded} months detected
-            </div>
-          )}
-
-          {/* Download Template */}
-          <button
-            onClick={downloadTemplate}
-            className="w-full flex items-center justify-center gap-2 text-xs font-bold text-slate-600 bg-white border border-slate-200 px-4 py-3 rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-colors"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-            Download CSV Template
-          </button>
-
-          {/* Upload File */}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="w-full flex items-center justify-center gap-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-3 rounded-xl transition-colors disabled:opacity-50"
-          >
-            {uploading
-              ? <><Loader className="w-4 h-4 animate-spin" /> Parsing file...</>
-              : <><Upload className="w-4 h-4" /> {isExcel ? 'Replace Upload' : 'Upload Excel / CSV'}</>
-            }
-          </button>
-
-        </div>
-      )}
+        {/* Upload File */}
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          className="ml-auto flex items-center justify-between gap-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-3 py-2 rounded-xl transition-colors disabled:opacity-50"
+        >
+          {uploading
+            ? <><Loader className="w-8 h-4 animate-spin" /> Parsing file...</>
+            : <><Upload className="w-8 h-4" /> {isExcel ? 'Replace' : 'Upload '}</>
+          }
+        </button>
+      </div>
 
       <input
         ref={fileInputRef}

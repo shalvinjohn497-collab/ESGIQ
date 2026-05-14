@@ -3,15 +3,16 @@
  * @param {Object} f - flags object
  * @returns {number} score 0–100
  */
-export function calculateWaterScore(f) {
-    return Math.min(100,
-        (f.wTrack ? 25 : 0) +
-        (f.wSplit ? 15 : 0) +
-        (f.hasSTP ? 20 : 0) +
-        (f.rainwater ? 15 : 0) +
-        (f.wAudit ? 15 : 0) +
-        (f.leakage ? 10 : 0)
-    );
+export function calculateWaterScore(flags, filledWaterMonths = 0) {
+    const trackingScore = (filledWaterMonths / 12) * 20;
+    return Math.min(100, Math.round(
+        trackingScore +
+        (flags.wSplit    ? 15 : 0) +
+        (flags.hasSTP    ? 20 : 0) +
+        (flags.rainwater ? 10 : 0) +
+        (flags.wAudit    ? 10 : 0) +
+        (flags.leakage   ? 10 : 0)
+    ));
 }
 
 /**
@@ -19,14 +20,16 @@ export function calculateWaterScore(f) {
  * @param {Object} f - flags object
  * @returns {number} score 0–100
  */
-export function calculateWasteScore(f) {
-    return Math.min(100,
-        (f.wtTrack ? 20 : 0) +
-        (f.segregation ? 30 : 0) +
-        (f.authVendor ? 25 : 0) +
-        (f.recycling ? 15 : 0) +
-        (f.wtAudit ? 10 : 0)
-    );
+export function calculateWasteScore(flags, filledWasteMonths = 0) {
+    const trackingScore = (filledWasteMonths / 12) * 15;
+    return Math.min(100, Math.round(
+        trackingScore +
+        (flags.wSegregate >= 95 ? 25 : flags.wSegregate >= 50 ? 12.5 : 0) +
+        (flags.recyclingPct >= 60 ? 20 : flags.recyclingPct >= 30 ? 10 : 0) +
+        (flags.authVendor  ? 20 : 0) +
+        (flags.hazHandling ? 10 : 0) +
+        (flags.wasteAudit  ? 10 : 0)
+    ));
 }
 
 /**

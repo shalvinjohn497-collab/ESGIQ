@@ -1,4 +1,3 @@
-
 import client from './client';
 
 export const assessmentApi = {
@@ -11,6 +10,8 @@ export const assessmentApi = {
   uploadCategory: (id, category, rows) => client.put(`/assessments/${id}/upload`, { category, rows }),
   saveGovernance: (id, flags) => client.put(`/assessments/${id}/governance`, { flags }),
   remove:  (id)      => client.delete(`/assessments/${id}`),
+  saveScores: (id, payload) =>
+    client.put(`/assessments/${id}/scores`, payload),
 };
 
 export default assessmentApi;

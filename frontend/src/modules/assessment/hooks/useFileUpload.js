@@ -68,30 +68,38 @@ export function useFileUpload() {
 
             if (!currentId) throw new Error("Could not find or create assessment for upload.");
 
-            // Upload categories
+            // Upload only the relevant category
             let updatedAssessment = null;
+            const categoryRowsMap = {
+                electricity: electricityRows,
+                water:       waterRows,
+                fuel:        fuelRows,
+                waste:       wasteRows,
+            };
+            const categoryEmojis = {
+                electricity: '⚡',
+                water:       '💧',
+                fuel:        '⛽',
+                waste:       '🗑️',
+            };
 
-            if (category === 'electricity' || category === 'all') {
-                console.log('⚡ Uploading electricity to API');
-                const res = await assessmentApi.upload(currentId, { category: 'electricity', rows: electricityRows });
-                updatedAssessment = res.data?.assessment;
-            }
-
-            if (category === 'water' || category === 'all') {
-                console.log('💧 Uploading water to API');
-                const res = await assessmentApi.upload(currentId, { category: 'water', rows: waterRows });
-                updatedAssessment = res.data?.assessment;
-            }
-
-            if (category === 'fuel' || category === 'all') {
-                console.log('⛽ Uploading fuel to API');
-                const res = await assessmentApi.upload(currentId, { category: 'fuel', rows: fuelRows });
-                updatedAssessment = res.data?.assessment;
-            }
-
-            if (category === 'waste' || category === 'all') {
-                console.log('🗑️ Uploading waste to API');
-                const res = await assessmentApi.upload(currentId, { category: 'waste', rows: wasteRows });
+            if (category === 'all') {
+                // Upload all categories
+                for (const cat of ['electricity', 'water', 'fuel', 'waste']) {
+                    console.log(`${categoryEmojis[cat]} Uploading ${cat} to API`);
+                    const res = await assessmentApi.upload(currentId, {
+                        category: cat,
+                        rows: categoryRowsMap[cat],
+                    });
+                    updatedAssessment = res.data?.assessment;
+                }
+            } else {
+                // Upload only the selected category
+                console.log(`${categoryEmojis[category]} Uploading ${category} to API`);
+                const res = await assessmentApi.upload(currentId, {
+                    category,
+                    rows: categoryRowsMap[category],
+                });
                 updatedAssessment = res.data?.assessment;
             }
 
@@ -108,7 +116,7 @@ export function useFileUpload() {
             }
 
             setLastUploaded({ category, fileName: file.name, timestamp: Date.now() });
-            if (errors.length > 0) setUploadErrors(errors);
+            if (errors.length > 0) setUploadErrors(errors); // errors are already filtered in parser
 
         } catch (err) {
             // ── CHECKPOINT ERR: Parse failure ────────────────────

@@ -73,7 +73,7 @@ AssessmentSchema.pre('findOneAndUpdate', function(next) {
   if (this.options.runValidators === undefined) {
     this.options.runValidators = false;
   }
-  next();
+  
 });
 
 export default mongoose.model('Assessment', AssessmentSchema);

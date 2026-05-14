@@ -14,7 +14,7 @@ import { determineCertificationLevel } from '@/calculations/scoring/determineCer
  * Hook that computes all ESG scores from rows and flags
  * Preserves exact calculation logic from original calcScores function
  */
-export function useAssessmentScoring(rows, flags) {
+export function useAssessmentScoring(rows, flags, sector = 'GEN') {
     return useMemo(() => {
         const filled = rows.filter((r) => r.elec > 0).length;
         const totalElec = rows.reduce((s, r) => s + (Number(r.elec) || 0), 0);
@@ -25,7 +25,7 @@ export function useAssessmentScoring(rows, flags) {
         const area = Number(flags.area) || 10000;
         const intensity = calculateIntensity(totalElec, area);
 
-        const energy = calculateEnergyScore({ filledMonths: filled, renewablePercent: renPct, intensity, flags });
+        const energy = calculateEnergyScore({ filledMonths: filled, renewablePercent: renPct, intensity, flags, sector });
         const water = calculateWaterScore(flags);
         const waste = calculateWasteScore(flags);
         const gov = calculateGovernanceScore(flags);
@@ -45,7 +45,7 @@ export function useAssessmentScoring(rows, flags) {
             totalElec, totalRen, totalDiesel,
             lv, lvC, ringC,
         };
-    }, [rows, flags]);
+    }, [rows, flags, sector]);
 }
 
 export default useAssessmentScoring;

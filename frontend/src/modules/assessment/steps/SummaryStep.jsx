@@ -9,7 +9,9 @@ import { useModuleValidation } from '@/modules/assessment/hooks/useModuleValidat
 import useAssessmentStore from '@/modules/assessment/store/assessment.store';
 import { useAssessmentResults } from '@/modules/assessment/hooks/useAssessmentResults';
 import { ROUTES } from '@/constants/routes';
-import {useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { assessmentApi } from '@/services/api/assessment.api';
+
 export default function SummaryStep() {
     const navigate = useNavigate();
     const results = useAssessmentResults();
@@ -23,7 +25,7 @@ export default function SummaryStep() {
   readiness: resolvedScores?.overall || 78,
 };
     // Reads flags/navigation from store
-    const { flags } = useAssessmentStore();
+    const { flags, assessmentId } = useAssessmentStore();
     const { validations } = useModuleValidation(resolvedScores);
 
     const catUpload = [
@@ -48,6 +50,30 @@ export default function SummaryStep() {
      useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
+    const [saving, setSaving] = useState(false);
+
+    const handleContinue = async () => {
+        setSaving(true);
+        try {
+            if (assessmentId) {
+                await assessmentApi.saveScores(assessmentId, {
+                    scores: resolvedScores,
+                    emissions: {
+                        scope1: resolvedScores.scope1,
+                        scope2: resolvedScores.scope2,
+                        scope3: resolvedScores.scope3,
+                        totalEm: resolvedScores.totalEm,
+                    },
+                });
+            }
+        } catch (err) {
+            console.error('[SummaryStep] saveScores failed:', err);
+        } finally {
+            setSaving(false);
+            navigate(ROUTES.ASSESSMENT_RESULTS);
+        }
+    };
+
     return (
   <PageShell
     title="Validation & Intelligence"
@@ -268,19 +294,21 @@ export default function SummaryStep() {
       ← Back
     </button>
     <button
-      onClick={() => navigate(ROUTES.ASSESSMENT_RESULTS)}
+      onClick={handleContinue}
+      disabled={saving}
       style={{
         padding: '12px 28px',
-        background: '#059669',
+        background: saving ? '#6ee7b7' : '#059669',
         border: 'none',
         borderRadius: 16,
         fontWeight: 700,
         fontSize: 14,
         color: '#ffffff',
-        cursor: 'pointer',
+        cursor: saving ? 'not-allowed' : 'pointer',
+        transition: 'background 0.2s',
       }}
     >
-      Continue to Readiness →
+      {saving ? 'Saving…' : 'Continue to Readiness →'}
     </button>
   </div>
 

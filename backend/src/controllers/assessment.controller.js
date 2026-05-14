@@ -1,4 +1,3 @@
-
 import mongoose from 'mongoose';
 import { asyncHandler } from '../middleware/error.middleware.js';
 import Assessment from '../models/Assessment.model.js';
@@ -131,6 +130,32 @@ export const assessmentController = {
     if (!assessment) {
       return res.status(404).json({ success: false, error: 'Not found' });
     }
+    res.json({ success: true, assessment });
+  }),
+  saveScores: asyncHandler(async (req, res) => {
+    const { scores, emissions, benchmarks, confidence, certifications } = req.body;
+
+    if (!scores || typeof scores !== 'object' || Array.isArray(scores)) {
+      return res.status(400).json({ success: false, error: 'scores object is required' });
+    }
+
+    const $set = { scores };
+
+    if (emissions  && typeof emissions  === 'object') $set.emissions  = emissions;
+    if (benchmarks && typeof benchmarks === 'object') $set.benchmarks = benchmarks;
+    if (confidence && typeof confidence === 'object') $set.confidence = confidence;
+    if (Array.isArray(certifications))                $set.certifications = certifications;
+
+    const assessment = await Assessment.findOneAndUpdate(
+      { _id: req.params.id, userId: getUserId(req) },
+      { $set },
+      { new: true, runValidators: false }
+    );
+
+    if (!assessment) {
+      return res.status(404).json({ success: false, error: 'Not found' });
+    }
+
     res.json({ success: true, assessment });
   }),
 };

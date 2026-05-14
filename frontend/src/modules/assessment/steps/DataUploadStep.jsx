@@ -12,20 +12,28 @@ export default function DataUploadStep() {
     const navigate = useNavigate();
     const { rows, setRows, flags, setFlags } = useAssessmentStore();
     const [exp, setExp] = useState('electricity');
-
-    const FACILITY_FIELDS = [
-        { k: 'hasLED', l: 'LED Lighting ≥60%' },
-        { k: 'hasBMS', l: 'BMS / Energy Monitoring' },
-        { k: 'submetering', l: 'Sub-Metering in Place' },
-        { k: 'wTrack', l: 'Water Tracking (12 mo.)' },
-        { k: 'hasSTP', l: 'STP / Water Reuse System' },
-        { k: 'segregation', l: 'Waste Segregation at Source' },
-        { k: 'authVendor', l: 'Authorized Waste Vendor' },
-        { k: 'policy', l: 'Sustainability Policy' },
-        { k: 'esgOwner', l: 'ESG Owner Designated' },
-        { k: 'sops', l: 'SOPs Documented' },
-        { k: 'audits', l: 'Internal Audits Conducted' },
-    ];
+const FACILITY_FIELDS = [
+    // Energy
+    { k: 'hasBMS', l: 'Energy Monitoring System (BMS/EMS)' },
+    // Water
+    { k: 'wSplit', l: 'Source-wise Water Split Documented' },
+    { k: 'hasSTP', l: 'STP/ETP Available and Operational' },
+    { k: 'rainwater', l: 'Rainwater Harvesting Operational' },
+    { k: 'wAudit', l: 'Water Quality Testing Conducted' },
+    { k: 'leakage', l: 'Leakage Monitoring System in Place' },
+    // Waste
+    { k: 'authVendor', l: 'Authorized Vendor for Hazardous/Biomedical Waste' },
+    { k: 'hazHandling', l: 'Hazardous/Biomedical Handling Procedures Documented' },
+    { k: 'wasteAudit', l: 'Waste Audit Records Maintained' },
+    // Governance
+    { k: 'policy', l: 'Sustainability/Environmental Policy in Place' },
+    { k: 'esgOwner', l: 'ESG Owner Designated' },
+    { k: 'monthlyRev', l: 'Monthly Utility Review Conducted' },
+    { k: 'sops', l: 'SOP Documentation Available' },
+    { k: 'audits', l: 'Internal Audits Conducted Within 12 Months' },
+    { k: 'compliance', l: 'Compliance Register Maintained' },
+    { k: 'iaqMonitoring', l: 'Indoor Air Quality Monitoring Operational' },
+];
 
     return (
         <PageShell
@@ -136,7 +144,9 @@ export default function DataUploadStep() {
                     <div>
                         <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-3">
                             Built-Up Area (sqft)
+                            
                         </label>
+                        
                         <input
                             type="number"
                             value={flags.area}
@@ -144,6 +154,96 @@ export default function DataUploadStep() {
                             className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 outline-none focus:border-emerald-400"
                         />
                     </div>
+                    <div>
+    <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-3">
+        Number of Employees
+    </label>
+    <input
+        type="number"
+        value={flags.employees || ''}
+        onChange={(e) => setFlags({ ...flags, employees: Number(e.target.value) })}
+        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 outline-none focus:border-emerald-400"
+    />
+</div>
+<div>
+    <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-3">
+        Average Daily Occupancy (persons/day)
+    </label>
+    <input
+        type="number"
+        value={flags.occupancy || ''}
+        onChange={(e) => setFlags({ ...flags, occupancy: Number(e.target.value) })}
+        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 outline-none focus:border-emerald-400"
+    />
+</div>
+<div>
+    <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-3">
+        LED Coverage %
+    </label>
+    <input
+        type="number"
+        min={0}
+        max={100}
+        value={flags.ledPct || ''}
+        onChange={(e) => setFlags({ ...flags, ledPct: Number(e.target.value) })}
+        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 outline-none focus:border-emerald-400"
+    />
+</div>
+<div>
+    <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-3">
+        HVAC / Equipment Type
+    </label>
+    <select
+        value={flags.hvacEfficient || ''}
+        onChange={(e) => setFlags({ ...flags, hvacEfficient: e.target.value })}
+        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 outline-none focus:border-emerald-400"
+    >
+        <option value="">Select type</option>
+        <option value="modern">Modern / Efficient</option>
+        <option value="moderate">Moderate</option>
+        <option value="old">Old / Inefficient</option>
+    </select>
+</div>
+<div>
+    <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-3">
+        Power Factor (from EB bill)
+    </label>
+    <input
+        type="number"
+        step="0.01"
+        min={0}
+        max={1}
+        value={flags.powerFactor || ''}
+        onChange={(e) => setFlags({ ...flags, powerFactor: Number(e.target.value) })}
+        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 outline-none focus:border-emerald-400"
+    />
+</div>
+<div>
+    <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-3">
+        Waste Segregation %
+    </label>
+    <input
+        type="number"
+        min={0}
+        max={100}
+        value={flags.wSegregate || ''}
+        onChange={(e) => setFlags({ ...flags, wSegregate: Number(e.target.value) })}
+        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 outline-none focus:border-emerald-400"
+    />
+</div>
+<div>
+    <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-3">
+        Recycling / Recovery Rate %
+    </label>
+    <input
+        type="number"
+        min={0}
+        max={100}
+        value={flags.recyclingPct || ''}
+        onChange={(e) => setFlags({ ...flags, recyclingPct: Number(e.target.value) })}
+        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 outline-none focus:border-emerald-400"
+    />
+</div>
 
                     {FACILITY_FIELDS.map(({ k, l }) => (
                         <div key={k} className="flex items-center justify-between border border-slate-100 rounded-2xl px-5 py-4 bg-slate-50/50">

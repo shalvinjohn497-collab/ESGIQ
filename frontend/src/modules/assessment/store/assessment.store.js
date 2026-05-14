@@ -20,6 +20,8 @@ const useAssessmentStore = create((set) => ({
         fuel: { monthsUploaded: 12, source: 'mock' },
         waste: { monthsUploaded: 12, source: 'mock' },
     },
+    scores: {},
+    assessmentId: null,
 
     setStep: (step) => set({ step }),
     nextStep: () => set((s) => ({ step: Math.min(s.step + 1, 3) })),
@@ -45,6 +47,9 @@ const useAssessmentStore = create((set) => ({
             uploadStatus: { ...s.uploadStatus, [category]: status },
         })),
 
+    setScores: (scores) => set({ scores }),
+    setAssessmentId: (assessmentId) => set({ assessmentId }),
+
     hydrateFromApi: (data) => set((s) => ({
         rows: data.rows?.length ? data.rows : s.rows,
         waterRows: data.waterRows?.length ? data.waterRows : s.waterRows,
@@ -52,6 +57,8 @@ const useAssessmentStore = create((set) => ({
         wasteRows: data.wasteRows?.length ? data.wasteRows : s.wasteRows,
         flags: data.flags && Object.keys(data.flags).length ? data.flags : s.flags,
         uploadStatus: data.uploadStatus || s.uploadStatus,
+        scores: data.scores && Object.keys(data.scores).length ? data.scores : s.scores,
+        assessmentId: data._id ? data._id : s.assessmentId,
     })),
 
     resetAssessment: () =>
@@ -68,6 +75,8 @@ const useAssessmentStore = create((set) => ({
                 fuel: { monthsUploaded: 12, source: 'mock' },
                 waste: { monthsUploaded: 12, source: 'mock' },
             },
+            scores: {},
+            assessmentId: null,
         }),
 }));
 

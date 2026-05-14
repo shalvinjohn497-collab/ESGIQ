@@ -1,12 +1,7 @@
-import { EMISSION_FACTORS } from '@/constants/emissionFactors';
-
-/**
- * Calculate Scope 1 emissions (diesel combustion)
- * @param {number} totalDiesel - total diesel in litres
- * @returns {number} tCO₂e
- */
-export function calculateScope1(totalDiesel) {
-    return +(totalDiesel * EMISSION_FACTORS.DIESEL / 1000).toFixed(2);
+export function calculateScope1(totalDieselLitres = 0, totalPngKg = 0) {
+    const dieselEmissions = (totalDieselLitres * 2.68) / 1000;
+    const gasEmissions    = (totalPngKg * 2.04) / 1000;
+    return +(dieselEmissions + gasEmissions).toFixed(2);
 }
 
 export default calculateScope1;

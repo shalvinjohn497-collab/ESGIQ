@@ -3,13 +3,15 @@ import { assessmentApi } from '@/services/api/assessment.api';
 import useAssessmentStore from '@/modules/assessment/store/assessment.store';
 import useAuthStore from '@/store/auth.store';
 
+
 export function useAssessmentPersistence() {
   const assessmentIdRef = useRef(null);
   const saveTimerRef    = useRef(null);
   const [isHydrating, setIsHydrating] = useState(true);
 
-  const { flags, hydrateFromApi } = useAssessmentStore();
+  const { flags, hydrateFromApi, setAssessmentId } = useAssessmentStore();
   const token = useAuthStore((s) => s.token);
+  
 
   // ── Load latest on mount ──────────────────────────────────────
   useEffect(() => {
@@ -34,6 +36,7 @@ export function useAssessmentPersistence() {
 
         assessmentIdRef.current = a._id;
         hydrateFromApi(a);
+        setAssessmentId(a._id);
       } catch (e) {
         if (!cancelled) console.log('No saved assessment:', e.message);
       } finally {
@@ -44,7 +47,7 @@ export function useAssessmentPersistence() {
     load();
 
     return () => { cancelled = true; };
-  }, [token, hydrateFromApi]);
+  }, [token, hydrateFromApi, setAssessmentId]);
 
   // ── Auto-save with 2s debounce (governance ONLY) ──────────────
   const save = useCallback(async () => {

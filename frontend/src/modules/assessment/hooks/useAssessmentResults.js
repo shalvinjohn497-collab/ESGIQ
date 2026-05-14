@@ -30,14 +30,16 @@ export function useAssessmentResults() {
 
     return useMemo(() => {
          console.log('useAssessmentResults running');
-        const filledMonths = rows.filter((row) => Number(row.elec) > 0).length;
+        // Bug 4 fix: Calculate filled months correctly from actual data
+        const filledMonths = rows.filter((row) => Number(row.elec) > 0 || Number(row.ren) > 0 || Number(row.diesel) > 0).length;
         const totalElec = rows.reduce((sum, row) => sum + (Number(row.elec) || 0), 0);
         const totalRen = rows.reduce((sum, row) => sum + (Number(row.ren) || 0), 0);
         const totalDiesel = rows.reduce((sum, row) => sum + (Number(row.diesel) || 0), 0);
         const totalWater = waterRows?.reduce((sum, r) => sum + (Number(r.totalWater) || 0), 0) ?? 0;
-        const filledWaterMonths = waterRows?.filter((r) => Number(r.totalWater) > 0).length ?? 0;
+        const filledWaterMonths = waterRows?.filter((r) => Number(r.totalWater) > 0 || Number(r.municipal) > 0).length ?? 0;
         const totalWaste = wasteRows?.reduce((sum, r) => sum + (Number(r.totalWaste) || 0), 0) ?? 0;
         const totalBiomedical = wasteRows?.reduce((sum, r) => sum + (Number(r.biomedical) || 0), 0) ?? 0;
+        const filledWasteMonths = wasteRows?.filter((r) => Number(r.wet) > 0 || Number(r.dry) > 0 || Number(r.biomedical) > 0 || Number(r.hazardous) > 0).length ?? 0;
         const totalFuelDiesel = fuelRows?.reduce((sum, r) => sum + (Number(r.fuelDiesel) || 0), 0) ?? 0;
         const area = Number(flags.area) || 10000;
 
@@ -72,11 +74,17 @@ export function useAssessmentResults() {
             renewablePercent,
             intensity,
             flags,
+            sector,
         });
 
         const energy = Math.round(applyConfidenceModifier(baseEnergyScore, filledMonths));
-        const water = calculateWaterScore(flags);
-        const waste = calculateWasteScore(flags);
+        
+        // Bug 6 fix: Apply confidence modifiers to water and waste scores too
+        const baseWaterScore = calculateWaterScore(flags, filledWaterMonths);
+        const baseWasteScore = calculateWasteScore(flags, filledWasteMonths);
+        const water = Math.round(applyConfidenceModifier(baseWaterScore, filledWaterMonths));
+        const waste = Math.round(applyConfidenceModifier(baseWasteScore, filledWasteMonths));
+        
         const gov = calculateGovernanceScore(flags);
         const overall = calculateOverallScore({ energy, water, waste, governance: gov });
         const readinessLabel = calculateReadiness(overall);
@@ -91,9 +99,12 @@ export function useAssessmentResults() {
 );
 console.log('Certification Results:', certificationResults);
 
-        const scope1 = calculateScope1(totalDiesel);
-        const scope2 = calculateScope2(totalElec);
-        const scope3 = calculateScope3(scope2);
+        const totalPng = fuelRows?.reduce((sum, r) => sum + (Number(r.png) || 0), 0) ?? 0;
+        const scope1 = calculateScope1(totalDiesel, totalPng);
+        const scope2 = calculateScope2(totalElec, totalRen);
+        // Bug 5 fix: Calculate scope3 from actual waste + water data, not as placeholder
+        const wasteToLandfill = wasteRows?.reduce((sum, r) => sum + (Number(r.wet) || 0) + (Number(r.dry) || 0), 0) ?? 0;
+        const scope3 = calculateScope3(wasteToLandfill, totalWater);
         const totalEmissions = calculateTotalEmissions(scope1, scope2, scope3);
 
         const { level: certLevel, color: certColor, ringColor } = determineCertificationLevel(overall);
@@ -106,11 +117,12 @@ console.log('Certification Results:', certificationResults);
             gov,
             overall,
             filled: filledMonths,
+            filledWaterMonths,
+            filledWasteMonths,
             totalElec,
             totalRen,
             totalDiesel,
             totalWater,
-            filledWaterMonths,
             totalWaste,
             totalBiomedical,
             totalFuelDiesel,

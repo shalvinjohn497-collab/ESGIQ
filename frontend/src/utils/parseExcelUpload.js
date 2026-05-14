@@ -72,12 +72,20 @@ export async function parseExcelUpload(file, category = 'all') {
     }
 
     const errors = [];
-    const electricityRows = parseElectricitySheet(workbook, errors);
-    const waterRows       = parseWaterSheet(workbook, errors);
-    const fuelRows        = parseFuelSheet(workbook, errors);
-    const wasteRows       = parseWasteSheet(workbook, errors);
+    const electricityRows = parseElectricitySheet(workbook, errors)
+        .filter(r => r.elec > 0 || r.ren > 0 || r.diesel > 0 || r.cost > 0);
+    const waterRows = parseWaterSheet(workbook, errors)
+        .filter(r => r.municipal > 0 || r.tanker > 0 || r.borewell > 0 || r.recycled > 0 || r.totalWater > 0);
+    const fuelRows = parseFuelSheet(workbook, errors)
+        .filter(r => r.fuelDiesel > 0 || r.png > 0 || r.runtime > 0);
+    const wasteRows = parseWasteSheet(workbook, errors)
+        .filter(r => r.wet > 0 || r.dry > 0 || r.biomedical > 0 || r.hazardous > 0 || r.totalWaste > 0);
 
-    return { electricityRows, waterRows, fuelRows, wasteRows, errors };
+    const filteredErrors = category === 'all'
+    ? errors
+    : errors.filter(e => e.toLowerCase().includes(category));
+
+return { electricityRows, waterRows, fuelRows, wasteRows, errors: filteredErrors };
 }
 
 function parseElectricitySheet(workbook, errors) {
