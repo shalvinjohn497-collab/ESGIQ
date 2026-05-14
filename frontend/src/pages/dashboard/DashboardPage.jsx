@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -9,6 +9,14 @@ import { CERTIFICATIONS, CERT_DASHBOARD_PREVIEWS } from '@/constants/certificati
 import ESGProcessingOverlay from '@/components/feedback/ESGProcessingOverlay';
 
 import { useAssessmentResults } from '@/modules/assessment/hooks/useAssessmentResults';
+import useAssessmentStore from '@/modules/assessment/store/assessment.store';
+import {
+    detectSpikes,
+    toMonthlyElectricityValues,
+    toMonthlyWaterValues,
+    toMonthlyFuelValues,
+    toMonthlyWasteValues,
+} from '@/utils/validation/detectSpikes';
 
 import { ROUTES } from '@/constants/routes';
 
@@ -32,6 +40,22 @@ export default function DashboardPage() {
     const navigate = useNavigate();
     const results = useAssessmentResults();
     const resolvedScores = results.scores;
+    const rows = useAssessmentStore((s) => s.rows);
+    const waterRows = useAssessmentStore((s) => s.waterRows);
+    const fuelRows = useAssessmentStore((s) => s.fuelRows);
+    const wasteRows = useAssessmentStore((s) => s.wasteRows);
+    const uploadDuplicateResolution = useAssessmentStore((s) => s.uploadDuplicateResolution);
+
+    const spikeWarningsByCategory = useMemo(
+        () => ({
+            electricity: detectSpikes(toMonthlyElectricityValues(rows)),
+            water: detectSpikes(toMonthlyWaterValues(waterRows)),
+            fuel: detectSpikes(toMonthlyFuelValues(fuelRows)),
+            waste: detectSpikes(toMonthlyWasteValues(wasteRows)),
+        }),
+        [rows, waterRows, fuelRows, wasteRows]
+    );
+
     const metrics = {
   energyMonitoringMonths: resolvedScores?.filled || 0,
   electricityMonths: resolvedScores?.filled || 0,
@@ -95,11 +119,15 @@ export default function DashboardPage() {
 <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
 
   <div style={{ flex: 2, minWidth: 0 }}>
-    <ValidationSummary metrics={{
+    <ValidationSummary
+      metrics={{
       energyMonitoringMonths: resolvedScores?.filled || 0,
       recycledWaterAvailable: results?.scores?.gov > 50,
       segregationMaturity: results?.scores?.waste >= 75 ? '3' : results?.scores?.waste >= 50 ? '2' : '1',
-    }} />
+    }}
+      spikeWarningsByCategory={spikeWarningsByCategory}
+      duplicateNoticesByCategory={uploadDuplicateResolution}
+    />
   </div>
 
   <div style={{

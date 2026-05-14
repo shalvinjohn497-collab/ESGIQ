@@ -6,9 +6,11 @@ import {
     INIT_FUEL_ROWS,
     INIT_WASTE_ROWS,
 } from '@/services/mock/assessment.mock';
+import { DEFAULT_SECTOR } from '@/constants/sectors';
 
 const useAssessmentStore = create((set) => ({
     step: 1,
+    sector: DEFAULT_SECTOR,
     rows: INIT_ROWS.map((r) => ({ ...r })),
     flags: { ...INIT_FLAGS },
     waterRows: INIT_WATER_ROWS.map((r) => ({ ...r })),
@@ -22,6 +24,12 @@ const useAssessmentStore = create((set) => ({
     },
     scores: {},
     assessmentId: null,
+    uploadDuplicateResolution: {
+        electricity: null,
+        water: null,
+        fuel: null,
+        waste: null,
+    },
 
     setStep: (step) => set({ step }),
     nextStep: () => set((s) => ({ step: Math.min(s.step + 1, 3) })),
@@ -39,6 +47,8 @@ const useAssessmentStore = create((set) => ({
     updateFlag: (key, value) =>
         set((s) => ({ flags: { ...s.flags, [key]: value } })),
 
+    setSector: (sector) => set({ sector }),
+
     setWaterRows: (waterRows) => set({ waterRows }),
     setFuelRows: (fuelRows) => set({ fuelRows }),
     setWasteRows: (wasteRows) => set({ wasteRows }),
@@ -50,6 +60,11 @@ const useAssessmentStore = create((set) => ({
     setScores: (scores) => set({ scores }),
     setAssessmentId: (assessmentId) => set({ assessmentId }),
 
+    setUploadDuplicateResolution: (partial) =>
+        set((s) => ({
+            uploadDuplicateResolution: { ...s.uploadDuplicateResolution, ...partial },
+        })),
+
     hydrateFromApi: (data) => set((s) => ({
         rows: data.rows?.length ? data.rows : s.rows,
         waterRows: data.waterRows?.length ? data.waterRows : s.waterRows,
@@ -59,11 +74,17 @@ const useAssessmentStore = create((set) => ({
         uploadStatus: data.uploadStatus || s.uploadStatus,
         scores: data.scores && Object.keys(data.scores).length ? data.scores : s.scores,
         assessmentId: data._id ? data._id : s.assessmentId,
+        sector: data.sector != null && data.sector !== '' ? data.sector : s.sector,
+        uploadDuplicateResolution:
+            data.uploadDuplicateResolution && typeof data.uploadDuplicateResolution === 'object'
+                ? { ...s.uploadDuplicateResolution, ...data.uploadDuplicateResolution }
+                : s.uploadDuplicateResolution,
     })),
 
     resetAssessment: () =>
         set({
             step: 1,
+            sector: DEFAULT_SECTOR,
             rows: INIT_ROWS.map((r) => ({ ...r })),
             flags: { ...INIT_FLAGS },
             waterRows: INIT_WATER_ROWS.map((r) => ({ ...r })),
@@ -77,6 +98,12 @@ const useAssessmentStore = create((set) => ({
             },
             scores: {},
             assessmentId: null,
+            uploadDuplicateResolution: {
+                electricity: null,
+                water: null,
+                fuel: null,
+                waste: null,
+            },
         }),
 }));
 

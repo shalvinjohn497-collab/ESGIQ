@@ -1,8 +1,16 @@
-import { useState } from 'react';
+import { useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UPLOAD_CATEGORIES } from '@/modules/assessment/configs/energy.module.jsx';
 import useAssessmentStore from '@/modules/assessment/store/assessment.store';
 import { ROUTES } from '@/constants/routes';
+import { SECTOR_CODES } from '@/constants/sectors';
+import {
+    FACILITY_FIELDS,
+    getFacilityToggleFieldsForSector,
+    getFacilityToggleKeysForSector,
+    shouldShowBedCount,
+} from '@/constants/facilityFieldsBySector';
+import { buildCategoryUploadStatuses, canProceedToSummary } from '@/calculations/scoring/calculateReadiness';
 import { PremiumUploadCard } from '../../../components/premium/upload/PremiumUploadCard';
 import { PremiumCard } from '../../../components/premium/shared/PremiumCard';
 import { PageShell } from '../../../components/premium/layout/PageShell';
@@ -10,30 +18,52 @@ import { Building2, ShieldCheck, Zap } from 'lucide-react';
 
 export default function DataUploadStep() {
     const navigate = useNavigate();
-    const { rows, setRows, flags, setFlags } = useAssessmentStore();
-    const [exp, setExp] = useState('electricity');
-const FACILITY_FIELDS = [
-    // Energy
-    { k: 'hasBMS', l: 'Energy Monitoring System (BMS/EMS)' },
-    // Water
-    { k: 'wSplit', l: 'Source-wise Water Split Documented' },
-    { k: 'hasSTP', l: 'STP/ETP Available and Operational' },
-    { k: 'rainwater', l: 'Rainwater Harvesting Operational' },
-    { k: 'wAudit', l: 'Water Quality Testing Conducted' },
-    { k: 'leakage', l: 'Leakage Monitoring System in Place' },
-    // Waste
-    { k: 'authVendor', l: 'Authorized Vendor for Hazardous/Biomedical Waste' },
-    { k: 'hazHandling', l: 'Hazardous/Biomedical Handling Procedures Documented' },
-    { k: 'wasteAudit', l: 'Waste Audit Records Maintained' },
-    // Governance
-    { k: 'policy', l: 'Sustainability/Environmental Policy in Place' },
-    { k: 'esgOwner', l: 'ESG Owner Designated' },
-    { k: 'monthlyRev', l: 'Monthly Utility Review Conducted' },
-    { k: 'sops', l: 'SOP Documentation Available' },
-    { k: 'audits', l: 'Internal Audits Conducted Within 12 Months' },
-    { k: 'compliance', l: 'Compliance Register Maintained' },
-    { k: 'iaqMonitoring', l: 'Indoor Air Quality Monitoring Operational' },
-];
+    const {
+        rows,
+        setRows,
+        flags,
+        setFlags,
+        waterRows,
+        fuelRows,
+        wasteRows,
+        uploadStatus,
+        sector,
+        setSector,
+    } = useAssessmentStore();
+
+    const ALL_TOGGLE_KEYS = useMemo(() => FACILITY_FIELDS.map((f) => f.k), []);
+
+    useEffect(() => {
+        setFlags((prev) => {
+            const visible = new Set(getFacilityToggleKeysForSector(sector));
+            const next = { ...prev };
+            let changed = false;
+            for (const k of ALL_TOGGLE_KEYS) {
+                if (!visible.has(k) && next[k]) {
+                    next[k] = false;
+                    changed = true;
+                }
+            }
+            if (!shouldShowBedCount(sector)) {
+                const bc = next.bedCount;
+                if (bc !== undefined && bc !== '' && bc != null) {
+                    next.bedCount = '';
+                    changed = true;
+                }
+            }
+            return changed ? next : prev;
+        });
+    }, [sector, setFlags, ALL_TOGGLE_KEYS]);
+
+    const visibleFacilityFields = useMemo(() => getFacilityToggleFieldsForSector(sector), [sector]);
+    const categoryStatuses = useMemo(
+        () => buildCategoryUploadStatuses({ rows, waterRows, fuelRows, wasteRows, uploadStatus }),
+        [rows, waterRows, fuelRows, wasteRows, uploadStatus]
+    );
+    const summaryGate = useMemo(
+        () => canProceedToSummary(categoryStatuses, UPLOAD_CATEGORIES),
+        [categoryStatuses]
+    );
 
     return (
         <PageShell
@@ -141,6 +171,27 @@ const FACILITY_FIELDS = [
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                    <div className="md:col-span-2 xl:col-span-3">
+                        <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-3">
+                            Organization sector
+                        </label>
+                        <select
+                            value={sector}
+                            onChange={(e) => setSector(e.target.value)}
+                            className="w-full max-w-md bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 outline-none focus:border-emerald-400"
+                        >
+                            {Object.entries(SECTOR_CODES).map(([code, label]) => (
+                                <option key={code} value={code}>
+                                    {label}
+                                </option>
+                            ))}
+                        </select>
+                        <p className="text-xs text-slate-500 mt-2 max-w-2xl">
+                            Sector drives which facility indicators and profile fields are shown (e.g. licensed bed count
+                            for healthcare).
+                        </p>
+                    </div>
+
                     <div>
                         <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-3">
                             Built-Up Area (sqft)
@@ -176,6 +227,25 @@ const FACILITY_FIELDS = [
         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 outline-none focus:border-emerald-400"
     />
 </div>
+{shouldShowBedCount(sector) && (
+<div>
+    <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-3">
+        Licensed bed count
+    </label>
+    <input
+        type="number"
+        min={0}
+        value={flags.bedCount ?? ''}
+        onChange={(e) =>
+            setFlags({
+                ...flags,
+                bedCount: e.target.value === '' ? '' : Number(e.target.value),
+            })
+        }
+        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 outline-none focus:border-emerald-400"
+    />
+</div>
+)}
 <div>
     <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-3">
         LED Coverage %
@@ -245,7 +315,7 @@ const FACILITY_FIELDS = [
     />
 </div>
 
-                    {FACILITY_FIELDS.map(({ k, l }) => (
+                    {visibleFacilityFields.map(({ k, l }) => (
                         <div key={k} className="flex items-center justify-between border border-slate-100 rounded-2xl px-5 py-4 bg-slate-50/50">
                             <span className="text-sm font-medium text-slate-700">{l}</span>
                             <button
@@ -268,13 +338,26 @@ const FACILITY_FIELDS = [
                 borderTop: '1px solid #e2e8f0',
                 padding: '16px 0',
                 display: 'flex',
-                justifyContent: 'flex-end',
+                flexDirection: 'column',
+                alignItems: 'flex-end',
+                gap: 8,
                 zIndex: 10,
                 marginTop: 32,
             }}>
+                {!summaryGate.ok && (
+                    <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-4 py-2 max-w-xl text-right">
+                        Complete required uploads: each of Electricity, Water, Fuel, and Waste needs at least 3 months of
+                        data (no parse errors). Categories with insufficient coverage, errors, or no data block this step.
+                    </p>
+                )}
                 <button
-                    onClick={() => navigate(ROUTES.ASSESSMENT_SUMMARY)}
-                    className="px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold text-sm transition-all shadow-sm"
+                    onClick={() => summaryGate.ok && navigate(ROUTES.ASSESSMENT_SUMMARY)}
+                    disabled={!summaryGate.ok}
+                    className={`px-8 py-4 rounded-2xl font-bold text-sm transition-all shadow-sm ${
+                        summaryGate.ok
+                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer'
+                            : 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                    }`}
                 >
                     Continue to Validation →
                 </button>

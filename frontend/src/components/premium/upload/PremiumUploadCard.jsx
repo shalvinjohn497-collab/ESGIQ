@@ -1,20 +1,61 @@
 
 import { useRef } from 'react';
-import { Upload, CheckCircle2, AlertCircle, Loader, FileSpreadsheet, X } from 'lucide-react';
+import { Upload, CheckCircle2, AlertCircle, Loader, FileSpreadsheet } from 'lucide-react';
 import { useFileUpload } from '@/modules/assessment/hooks/useFileUpload';
 import useAssessmentStore from '@/modules/assessment/store/assessment.store';
+import { deriveCategoryDataStatus, getFilledMonthsForUploadCategory } from '@/calculations/scoring/calculateReadiness';
+import { STATUS } from '@/constants/uploadCategoryStatus';
 
 export const PremiumUploadCard = ({ title, icon: Icon, categoryId }) => {
   const fileInputRef = useRef(null);
-  const { handleFile, uploading, uploadErrors, lastUploaded } = useFileUpload();
+  const { handleFile, uploading } = useFileUpload();
   const uploadStatus = useAssessmentStore((s) => s.uploadStatus);
+  const rows = useAssessmentStore((s) => s.rows);
+  const waterRows = useAssessmentStore((s) => s.waterRows);
+  const fuelRows = useAssessmentStore((s) => s.fuelRows);
+  const wasteRows = useAssessmentStore((s) => s.wasteRows);
 
   const status = uploadStatus?.[categoryId];
-  const monthsUploaded = status?.monthsUploaded ?? 0;
+  const monthsFilled = getFilledMonthsForUploadCategory(categoryId, { rows, waterRows, fuelRows, wasteRows });
+  const parseFailed = Boolean(status?.parseFailed || status?.source === 'error');
+  const dataStatus = deriveCategoryDataStatus(monthsFilled, { parseFailed });
   const isExcel = status?.source === 'excel';
-  const isComplete = monthsUploaded >= 10;
-  const isPartial = monthsUploaded >= 6 && monthsUploaded < 10;
-  const pct = Math.min(100, Math.round((monthsUploaded / 12) * 100));
+  const pct = Math.min(100, Math.round((monthsFilled / 12) * 100));
+
+  const barColor =
+    dataStatus === STATUS.COMPLETE
+      ? '#10b981'
+      : dataStatus === STATUS.PARTIAL
+        ? '#f59e0b'
+        : dataStatus === STATUS.INSUFFICIENT
+          ? '#f97316'
+          : dataStatus === STATUS.ERROR
+            ? '#ef4444'
+            : '#e2e8f0';
+
+  function statusBadge() {
+    if (uploading) {
+      return (
+        <div className="flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg uppercase">
+          <Loader className="w-3 h-3 animate-spin" /> Parsing
+        </div>
+      );
+    }
+    const map = {
+      [STATUS.COMPLETE]: { cls: 'text-emerald-600 bg-emerald-50', Icon: CheckCircle2, label: 'Complete' },
+      [STATUS.PARTIAL]: { cls: 'text-amber-600 bg-amber-50', Icon: AlertCircle, label: 'Partial' },
+      [STATUS.INSUFFICIENT]: { cls: 'text-orange-600 bg-orange-50', Icon: AlertCircle, label: 'Insufficient' },
+      [STATUS.ERROR]: { cls: 'text-red-600 bg-red-50', Icon: AlertCircle, label: 'Error' },
+      [STATUS.MISSING]: { cls: 'text-slate-400 bg-slate-50', Icon: AlertCircle, label: 'Missing' },
+    };
+    const cfg = map[dataStatus] || map[STATUS.MISSING];
+    const I = cfg.Icon;
+    return (
+      <div className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg uppercase ${cfg.cls}`}>
+        <I className="w-3 h-3" /> {cfg.label}
+      </div>
+    );
+  }
 
   function onFileChange(e) {
     const file = e.target.files?.[0];
@@ -50,23 +91,7 @@ export const PremiumUploadCard = ({ title, icon: Icon, categoryId }) => {
             {Icon && <Icon className="w-6 h-6 text-slate-400" />}
           </div>
 
-          {uploading ? (
-            <div className="flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg uppercase">
-              <Loader className="w-3 h-3 animate-spin" /> Parsing
-            </div>
-          ) : isComplete ? (
-            <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg uppercase">
-              <CheckCircle2 className="w-3 h-3" /> Verified
-            </div>
-          ) : isPartial ? (
-            <div className="flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-lg uppercase">
-              <AlertCircle className="w-3 h-3" /> Partial
-            </div>
-          ) : (
-            <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-lg uppercase">
-              Pending
-            </div>
-          )}
+          {statusBadge()}
         </div>
 
         <h4 className="text-lg font-bold text-[#0f172a] mb-1">{title}</h4>
@@ -78,7 +103,7 @@ export const PremiumUploadCard = ({ title, icon: Icon, categoryId }) => {
             className="h-full rounded-full transition-all duration-500"
             style={{
               width: `${pct}%`,
-              background: isComplete ? '#10b981' : isPartial ? '#f59e0b' : '#e2e8f0',
+              background: barColor,
             }}
           />
         </div>
@@ -87,7 +112,7 @@ export const PremiumUploadCard = ({ title, icon: Icon, categoryId }) => {
         <div className="flex items-center gap-1.5 pt-3 border-t border-slate-100">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
           <div className="text-xs font-medium text-slate-400">
-            <span className="text-slate-900 font-bold">{monthsUploaded}</span>/12 months
+            <span className="text-slate-900 font-bold">{monthsFilled}</span>/12 months
             {isExcel && <span className="ml-2 text-emerald-600 font-bold">· Excel</span>}
           </div>
         </div>

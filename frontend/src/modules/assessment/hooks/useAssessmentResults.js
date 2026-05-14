@@ -5,7 +5,13 @@ import { applyConfidenceModifier } from '@/calculations/scoring/applyConfidenceM
 import { calculateEnergyScore } from '@/calculations/energy/calculateEnergyScore';
 import { calculateIntensity } from '@/calculations/energy/calculateIntensity';
 import { calculateRenewableShare } from '@/calculations/energy/calculateRenewableShare';
-import { calculateWaterScore, calculateWasteScore, calculateGovernanceScore, calculateReadiness } from '@/calculations/scoring/calculateReadiness';
+import {
+    calculateWaterScore,
+    calculateWasteScore,
+    calculateGovernanceScore,
+    calculateReadiness,
+    buildCategoryUploadStatuses,
+} from '@/calculations/scoring/calculateReadiness';
 import { calculateScope1 } from '@/calculations/emissions/calculateScope1';
 import { calculateScope2 } from '@/calculations/emissions/calculateScope2';
 import { calculateScope3 } from '@/calculations/emissions/calculateScope3';
@@ -15,6 +21,7 @@ import { determineCertificationLevel } from '@/calculations/scoring/determineCer
 import { getConfidenceModifier } from '@/constants/confidenceModifiers';
 import { calculateAllCertifications } from '@/calculations/certifications';
 import useAuthStore from '@/store/auth.store';
+import { DEFAULT_SECTOR } from '@/constants/sectors';
 import {
   deriveEnergyMetrics,
   deriveWaterMetrics,
@@ -26,7 +33,10 @@ export function useAssessmentResults() {
     const waterRows = useAssessmentStore((s) => s.waterRows);
     const fuelRows = useAssessmentStore((s) => s.fuelRows);
     const wasteRows = useAssessmentStore((s) => s.wasteRows);
-    const sector = useAuthStore((s) => s.user?.sector || 'HOSP');
+    const uploadStatus = useAssessmentStore((s) => s.uploadStatus);
+    const assessmentSector = useAssessmentStore((s) => s.sector);
+    const authSector = useAuthStore((s) => s.user?.sector);
+    const sector = assessmentSector || authSector || DEFAULT_SECTOR;
 
     return useMemo(() => {
          console.log('useAssessmentResults running');
@@ -110,6 +120,14 @@ console.log('Certification Results:', certificationResults);
         const { level: certLevel, color: certColor, ringColor } = determineCertificationLevel(overall);
         const confidenceModifier = getConfidenceModifier(filledMonths);
 
+        const categoryUploadStatuses = buildCategoryUploadStatuses({
+            rows,
+            waterRows,
+            fuelRows,
+            wasteRows,
+            uploadStatus,
+        });
+
         const scores = {
             energy,
             water,
@@ -161,8 +179,9 @@ console.log('Certification Results:', certificationResults);
     certificationResults,
 
     operationalMetrics,
+    categoryUploadStatuses,
 };
-    }, [rows, flags, sector, waterRows, fuelRows, wasteRows]);
+    }, [rows, flags, assessmentSector, authSector, waterRows, fuelRows, wasteRows, uploadStatus]);
 }
 
 export default useAssessmentResults;

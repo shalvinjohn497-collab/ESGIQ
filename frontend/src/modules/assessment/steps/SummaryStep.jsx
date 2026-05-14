@@ -1,21 +1,70 @@
 import { PageShell } from '../../../components/premium/layout/PageShell';
 import { PremiumCard } from '../../../components/premium/shared/PremiumCard';
 import { ValidationSummary } from '../../../components/premium/summary/ValidationSummary';
-import { C } from '@/theme/colors';
 import { useNavigate } from 'react-router-dom';
-import Button from '@/components/ui/Button';
-import ValidationPanel from '@/modules/assessment/components/ValidationPanel';
 import { useModuleValidation } from '@/modules/assessment/hooks/useModuleValidation';
 import useAssessmentStore from '@/modules/assessment/store/assessment.store';
 import { useAssessmentResults } from '@/modules/assessment/hooks/useAssessmentResults';
 import { ROUTES } from '@/constants/routes';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { assessmentApi } from '@/services/api/assessment.api';
+import { UPLOAD_CATEGORIES } from '@/modules/assessment/configs/energy.module.jsx';
+import { STATUS, STATUS_LABELS } from '@/constants/uploadCategoryStatus';
+import { assignBenchmarkStatus } from '@/calculations/scoring/assignBenchmarkStatus';
+import {
+    detectSpikes,
+    toMonthlyElectricityValues,
+    toMonthlyWaterValues,
+    toMonthlyFuelValues,
+    toMonthlyWasteValues,
+} from '@/utils/validation/detectSpikes';
+
+const CAT_ICONS = {
+    electricity: '⚡',
+    water: '💧',
+    fuel: '⛽',
+    waste: '♻️',
+    refrigerants: '❄️',
+    transport: '🚛',
+    governance: '🛡️',
+};
+
+function badgeClassForDataStatus(st) {
+    switch (st) {
+        case STATUS.COMPLETE:
+            return 'bg-emerald-50 text-emerald-700';
+        case STATUS.PARTIAL:
+            return 'bg-amber-50 text-amber-700';
+        case STATUS.INSUFFICIENT:
+            return 'bg-orange-50 text-orange-700';
+        case STATUS.ERROR:
+            return 'bg-red-50 text-red-700';
+        case STATUS.MISSING:
+            return 'bg-slate-100 text-slate-500';
+        default:
+            return 'bg-slate-100 text-slate-500';
+    }
+}
+
+const KPI_VALUE_CLASS = {
+    emerald: 'text-emerald-600',
+    amber: 'text-amber-600',
+    teal: 'text-teal-600',
+    red: 'text-red-600',
+};
+
+const KPI_BENCHMARK_BADGE_CLASS = {
+    emerald: 'bg-emerald-50 text-emerald-800 border border-emerald-100',
+    amber: 'bg-amber-50 text-amber-900 border border-amber-100',
+    teal: 'bg-teal-50 text-teal-800 border border-teal-100',
+    red: 'bg-red-50 text-red-800 border border-red-100',
+};
 
 export default function SummaryStep() {
     const navigate = useNavigate();
     const results = useAssessmentResults();
     const resolvedScores = results.scores;
+    const categoryUploadStatuses = results.categoryUploadStatuses;
     const metrics = {
   energyMonitoringMonths: resolvedScores?.filled || 0,
   electricityMonths: resolvedScores?.filled || 0,
@@ -25,27 +74,84 @@ export default function SummaryStep() {
   readiness: resolvedScores?.overall || 78,
 };
     // Reads flags/navigation from store
-    const { flags, assessmentId } = useAssessmentStore();
+    const { flags, assessmentId, rows, waterRows, fuelRows, wasteRows, uploadDuplicateResolution } =
+        useAssessmentStore();
     const { validations } = useModuleValidation(resolvedScores);
 
-    const catUpload = [
-        { cat: 'Electricity', icon: '⚡', months: `${resolvedScores.filled}/12`, status: resolvedScores.filled >= 12 ? 'Complete' : 'Partial', c: resolvedScores.filled >= 12 ? C.green : C.amber },
-        { cat: 'Water', icon: '💧', months: '12/12', status: 'Complete', c: C.green },
-        { cat: 'Fuel', icon: '⛽', months: '12/12', status: 'Complete', c: C.green },
-        { cat: 'Waste', icon: '♻️', months: '12/12', status: 'Complete', c: C.green },
-        { cat: 'Refrigerants', icon: '❄️', months: '8/12', status: 'Partial', c: C.amber },
-        { cat: 'Transport', icon: '🚛', months: '6/12', status: 'Partial', c: C.amber },
-        { cat: 'Governance', icon: '🛡️', months: '—', status: 'Complete', c: C.green },
-    ];
+    const catUpload = useMemo(() => {
+        const map = categoryUploadStatuses || {};
+        return UPLOAD_CATEGORIES.map((cat) => {
+            const rec = map[cat.id] || { months: 0, status: STATUS.MISSING };
+            const total = cat.total ?? 12;
+            const monthsLabel = cat.total == null ? '—' : `${rec.months}/${total}`;
+            return {
+                key: cat.id,
+                cat: cat.label,
+                icon: CAT_ICONS[cat.id] || '📁',
+                months: monthsLabel,
+                status: rec.status,
+                statusLabel: STATUS_LABELS[rec.status] || rec.status,
+                badgeClass: badgeClassForDataStatus(rec.status),
+            };
+        });
+    }, [categoryUploadStatuses]);
 
     const annElec = results.annualizedElec;
 
-    const kpis = [
-        { l: 'Energy Intensity', v: `${resolvedScores.intensity}`, u: 'kWh/sqft/yr', b: 'Bench: 15–22', ok: resolvedScores.intensity < 22 },
-        { l: 'Water Intensity', v: '0.24', u: 'KL/sqft/yr', b: 'Bench: 0.20–0.35', ok: true },
-        { l: 'Renewable Energy', v: `${resolvedScores.renPct}%`, u: 'Of total energy', b: 'Bench: >10%', ok: resolvedScores.renPct > 10 },
-        { l: 'Waste Recycling', v: '58.3%', u: 'Recycling rate', b: 'Bench: >60%', ok: false },
-    ];
+    const kpis = useMemo(() => {
+        const intensity = Number(resolvedScores.intensity) || 0;
+        const area = Number(flags.area) || 10000;
+        const filledWM = Number(resolvedScores.filledWaterMonths) || 0;
+        const tw = Number(resolvedScores.totalWater) || 0;
+        const waterIntensity =
+            filledWM > 0 && area > 0 ? (tw / filledWM) * 12 / area : 0;
+        const renPct = Number(resolvedScores.renPct) || 0;
+        const recyclingPct =
+            Number(results.operationalMetrics?.recyclingPct) ||
+            Number(flags.recyclingPct) ||
+            0;
+
+        return [
+            {
+                l: 'Energy Intensity',
+                v: intensity.toLocaleString(undefined, { maximumFractionDigits: 1 }),
+                u: 'kWh/sqft/yr',
+                b: 'Bench: 15–22',
+                ...assignBenchmarkStatus(intensity, 15, 22, { lowerIsBetter: true }),
+            },
+            {
+                l: 'Water Intensity',
+                v: waterIntensity.toFixed(2),
+                u: 'KL/sqft/yr',
+                b: 'Bench: 0.20–0.35',
+                ...assignBenchmarkStatus(waterIntensity, 0.2, 0.35, { lowerIsBetter: true }),
+            },
+            {
+                l: 'Renewable Energy',
+                v: `${renPct.toFixed(1)}%`,
+                u: 'Of total energy',
+                b: 'Bench: >10%',
+                ...assignBenchmarkStatus(renPct, 10, 100, { lowerIsBetter: false }),
+            },
+            {
+                l: 'Waste Recycling',
+                v: `${recyclingPct.toFixed(1)}%`,
+                u: 'Recycling rate',
+                b: 'Bench: >60%',
+                ...assignBenchmarkStatus(recyclingPct, 60, 100, { lowerIsBetter: false }),
+            },
+        ];
+    }, [resolvedScores, flags.area, flags.recyclingPct, results.operationalMetrics]);
+
+    const spikeWarningsByCategory = useMemo(
+        () => ({
+            electricity: detectSpikes(toMonthlyElectricityValues(rows)),
+            water: detectSpikes(toMonthlyWaterValues(waterRows)),
+            fuel: detectSpikes(toMonthlyFuelValues(fuelRows)),
+            waste: detectSpikes(toMonthlyWasteValues(wasteRows)),
+        }),
+        [rows, waterRows, fuelRows, wasteRows]
+    );
 
      useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -88,6 +194,8 @@ export default function SummaryStep() {
           recycledWaterAvailable: flags.hasSTP,
           segregationMaturity: flags.segregation ? '3' : '1',
         }}
+        spikeWarningsByCategory={spikeWarningsByCategory}
+        duplicateNoticesByCategory={uploadDuplicateResolution}
       />
 
       {/* Upload Overview */}
@@ -110,7 +218,7 @@ export default function SummaryStep() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {catUpload.map((r) => (
             <div
-              key={r.cat}
+              key={r.key}
               className="border border-slate-200 rounded-2xl p-5"
             >
               <div className="flex items-center justify-between mb-3">
@@ -119,13 +227,9 @@ export default function SummaryStep() {
                 </span>
 
                 <span
-                  className={`text-xs font-bold px-2 py-1 rounded-lg ${
-                    r.status === 'Complete'
-                      ? 'bg-emerald-50 text-emerald-700'
-                      : 'bg-amber-50 text-amber-700'
-                  }`}
+                  className={`text-xs font-bold px-2 py-1 rounded-lg ${r.badgeClass}`}
                 >
-                  {r.status}
+                  {r.statusLabel}
                 </span>
               </div>
 
@@ -141,13 +245,22 @@ export default function SummaryStep() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {kpis.map((k) => (
           <PremiumCard key={k.l} className="p-6">
-            <div className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">
-              {k.l}
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <div className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                {k.l}
+              </div>
+              <span
+                className={`text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded-lg shrink-0 ${
+                  KPI_BENCHMARK_BADGE_CLASS[k.colour] || KPI_BENCHMARK_BADGE_CLASS.teal
+                }`}
+              >
+                {k.label}
+              </span>
             </div>
 
             <div
               className={`text-3xl font-black tracking-tight ${
-                k.ok ? 'text-emerald-600' : 'text-amber-500'
+                KPI_VALUE_CLASS[k.colour] || KPI_VALUE_CLASS.teal
               }`}
             >
               {k.v}
