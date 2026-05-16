@@ -1,5 +1,6 @@
 import express from 'express'
 import cors    from 'cors'
+import morgan  from 'morgan'
 import { errorHandler } from './middleware/error.middleware.js'
 import authRoutes       from './routes/auth.routes.js'
 import assessmentRoutes from './routes/assessment.routes.js'
@@ -17,12 +18,11 @@ export function createApp() {
   }))
   app.use(express.json({ limit: '10mb' }))
 
-  // Dev request logger
-  app.use((req, _res, next) => {
-    if (process.env.NODE_ENV !== 'production')
-      console.log(`${req.method} ${req.originalUrl}`)
-    next()
-  })
+  // HTTP request logger
+  if (process.env.NODE_ENV !== 'production')
+    app.use(morgan('dev'))
+  else
+    app.use(morgan('combined'))
 
   // Health check
   app.get('/health', (_req, res) =>
