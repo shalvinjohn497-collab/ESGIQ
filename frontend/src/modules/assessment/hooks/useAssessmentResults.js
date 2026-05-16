@@ -31,6 +31,7 @@ import {
 } from '@/calculations/derived';
 import { runCrossCategoryConsistencyChecks } from '@/utils/validation/crossCategoryChecks';
 import { evaluateInsights, DEFAULT_BENCHMARKS } from '@/calculations/insights/evaluateInsights';
+import useAssessmentStore from '@/modules/assessment/store/assessment.store';
 
 export function useAssessmentResults() {
     const { rows, flags } = useAssessmentStore();
