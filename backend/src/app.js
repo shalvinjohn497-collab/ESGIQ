@@ -2,8 +2,9 @@ import express from 'express'
 import cors    from 'cors'
 import morgan  from 'morgan'
 import { errorHandler } from './middleware/error.middleware.js'
-import authRoutes       from './routes/auth.routes.js'
-import assessmentRoutes from './routes/assessment.routes.js'
+import authRoutes         from './routes/auth.routes.js'
+import assessmentRoutes   from './routes/assessment.routes.js'
+import consultationRoutes from './routes/consultation.routes.js'
 
 export function createApp() {
   const app = express()
@@ -32,6 +33,7 @@ export function createApp() {
   // Routes — add more here as you build each phase
   app.use('/api/auth', authRoutes)
   app.use('/api/assessments', assessmentRoutes)
+  app.use('/api/consultations', consultationRoutes)
 
   // 404
   app.use((req, res) =>

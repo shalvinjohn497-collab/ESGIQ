@@ -2,7 +2,7 @@ import { useEffect, useCallback, useRef, useState } from 'react';
 import { assessmentApi } from '@/services/api/assessment.api';
 import useAssessmentStore from '@/modules/assessment/store/assessment.store';
 import useAuthStore from '@/store/auth.store';
-import { DEFAULT_SECTOR } from '@/constants/sectors';
+
 
 
 export function useAssessmentPersistence() {
@@ -53,7 +53,7 @@ export function useAssessmentPersistence() {
   // ── Auto-save with 2s debounce (governance ONLY) ──────────────
   const save = useCallback(async () => {
     if (!token) return;
-    const payload = { flags, sector: sector || DEFAULT_SECTOR };
+    const payload = { flags, sector: sector || null };
     try {
       if (assessmentIdRef.current) {
         await assessmentApi.update(assessmentIdRef.current, payload);

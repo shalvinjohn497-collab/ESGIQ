@@ -1,18 +1,13 @@
-import { C } from '@/theme/colors';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Button from '@/components/ui/Button';
-import ScoreRing from '@/components/indicators/ScoreRing';
-import StatusBadge from '@/components/indicators/StatusBadge';
-import ESGRadarChart from '@/components/charts/ESGRadarChart';
-import { CERTIFICATION_ICONS } from '@/constants/scoring';
-import { CERTIFICATIONS, CERTIFICATION_PATHWAY } from '@/constants/certifications';
+import { CERTIFICATIONS } from '@/constants/certifications';
 import { generateStrengths, generateGaps, generateRoadmap } from '@/utils/generateResultsInsights';
 import useAssessmentStore from '@/modules/assessment/store/assessment.store';
 import { useToast } from '@/hooks/useToast';
 import { useAssessmentResults } from '@/modules/assessment/hooks/useAssessmentResults';
 import { ROUTES } from '@/constants/routes';
 import { PageShell } from '../../../components/premium/layout/PageShell';
-import { PremiumCard } from '../../../components/premium/shared/PremiumCard';
 import { ReadinessHero } from '../../../components/premium/readiness/ReadinessHero';
 import ExecutiveSummary from '@/components/premium/readiness/ExecutiveSummary';
 import CertificationReadinessMatrix from '@/components/premium/readiness/CertificationReadinessMatrix';
@@ -21,18 +16,18 @@ import StrengthsGapsList from '@/components/premium/readiness/StrengthsGapsList'
 import CertificationPathwaySequencing from '@/components/premium/readiness/CertificationPathwaySequencing';
 import { useSaveAssessmentResults } from '@/modules/assessment/hooks/useSaveAssessmentResults';
 import { useDownloadPdf } from '@/modules/assessment/hooks/useDownloadPdf';
-import { useEffect, useCallback } from 'react';
+import BenchmarkModal from '@/components/premium/readiness/BenchmarkModal';
+import ConsultationModal from '@/components/premium/readiness/ConsultationModal';
+
 export default function ResultsStep() {
     const navigate = useNavigate();
     const { showToast } = useToast();
     const results = useAssessmentResults();
     const { certificationResults } = results;
     const resolvedScores = results.scores;
-    const metrics = {
-  energyMonitoringMonths: resolvedScores?.filled || 0,
-};
     const radarData = results.radarData;
     const lvLabel = results.readinessLabel;
+
     const FALLBACK_CERTS = CERTIFICATIONS.map((c) => ({
         id: c.cert,
         name: c.cert,
@@ -53,15 +48,13 @@ export default function ResultsStep() {
     const gaps = generateGaps(resolvedScores, flags);
     const roadmap = generateRoadmap(resolvedScores, flags);
 
-    // If for some reason we have fewer than expected generated elements, we provide fallbacks
-    // but the generator should handle standard paths.
     if (strengths.length === 0) strengths.push('Data ingestion successful');
     if (gaps.length === 0) gaps.push('No critical compliance blockers detected');
 
     const sortedCerts = [...certRows].sort((a, b) => (b.score || 0) - (a.score || 0));
     const bestCertification = sortedCerts[0];
-    
-    let regRiskSummary = "Regulatory compliance checks pending.";
+
+    let regRiskSummary = 'Regulatory compliance checks pending.';
     if (results.regulatoryResults?.length > 0) {
         const applicable = results.regulatoryResults.filter(r => r.applicable);
         const highRisk = applicable.filter(r => r.riskLevel === 'High').length;
@@ -77,97 +70,89 @@ export default function ResultsStep() {
     const onPdfError = useCallback(() => showToast('PDF generation failed. Please try again.', 'error'), [showToast]);
     const { downloadPdf, isGenerating: isPdfGenerating } = useDownloadPdf({ onSuccess: onPdfSuccess, onError: onPdfError });
 
+    const [showBenchmark, setShowBenchmark] = useState(false);
+    const [showConsultation, setShowConsultation] = useState(false);
+
     useEffect(() => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }, []);
-   return (
-  <PageShell
-    title="Readiness Intelligence"
-    subtitle="Executive sustainability readiness and certification analysis."
-  >
-    <div className="space-y-8">
 
-      {/* HERO */}
-      <ReadinessHero
-        score={resolvedScores.overall}
-        metrics={{
-          energyMonitoringMonths: resolvedScores.filled,
-        }}
-        radarData={radarData}
-      />
-
-      <ExecutiveSummary 
-          overallScore={resolvedScores.overall}
-          readinessStage={lvLabel}
-          strengths={strengths}
-          gaps={gaps}
-          bestCertification={bestCertification}
-          regulatoryRiskSummary={regRiskSummary}
-      />
-
-      {/* CERTIFICATIONS */}
-      <div>
-          <h3 className="text-2xl font-bold text-slate-900 mb-6">Certification Readiness Matrix</h3>
-          <CertificationReadinessMatrix frameworks={certRows} />
-      </div>
-
-      {/* REGULATORY */}
-      <div>
-          <h3 className="text-2xl font-bold text-slate-900 mb-6">Global Regulatory Readiness</h3>
-          <RegulatoryReadinessTable results={results.regulatoryResults || []} />
-      </div>
-
-      {/* STRENGTHS & GAPS */}
-      <div>
-          <h3 className="text-2xl font-bold text-slate-900 mb-6">Maturity Analysis & Action Plan</h3>
-          <StrengthsGapsList strengths={strengths} gaps={gaps} roadmap={roadmap} />
-      </div>
-
-      {/* PATHWAY */}
-      <CertificationPathwaySequencing frameworks={certRows} roadmap={roadmap} />
-
-      {/* ACTIONS */}
-      <div className="flex items-center justify-between pt-2">
-
-        <Button
-          variant="secondary"
-          onClick={() => navigate(ROUTES.ASSESSMENT_SUMMARY)}
+    return (
+        <PageShell
+            title="Readiness Intelligence"
+            subtitle="Executive sustainability readiness and certification analysis."
         >
-          ← Back to Summary
-        </Button>
+            <div className="space-y-8">
 
-        <div className="flex gap-3 flex-wrap">
+                <ReadinessHero
+                    score={resolvedScores.overall}
+                    metrics={{ energyMonitoringMonths: resolvedScores.filled }}
+                    radarData={radarData}
+                />
 
-          <Button
-            variant="secondary"
-            onClick={downloadPdf}
-            disabled={isPdfGenerating}
-          >
-            {isPdfGenerating ? 'Generating PDF…' : 'Download PDF'}
-          </Button>
+                <ExecutiveSummary
+                    overallScore={resolvedScores.overall}
+                    readinessStage={lvLabel}
+                    strengths={strengths}
+                    gaps={gaps}
+                    bestCertification={bestCertification}
+                    regulatoryRiskSummary={regRiskSummary}
+                />
 
-          <Button
-            variant="secondary"
-            onClick={() =>
-              showToast('Industry benchmarking coming soon.')
-            }
-          >
-            Benchmark
-          </Button>
+                <div>
+                    <h3 className="text-2xl font-bold text-slate-900 mb-6">Certification Readiness Matrix</h3>
+                    <CertificationReadinessMatrix frameworks={certRows} />
+                </div>
 
-          <Button
-            onClick={() =>
-              showToast('Consultation scheduling disabled in demo.')
-            }
-          >
-            Book ESG Consultation
-          </Button>
+                <div>
+                    <h3 className="text-2xl font-bold text-slate-900 mb-6">Global Regulatory Readiness</h3>
+                    <RegulatoryReadinessTable results={results.regulatoryResults || []} />
+                </div>
 
-        </div>
+                <div>
+                    <h3 className="text-2xl font-bold text-slate-900 mb-6">Maturity Analysis & Action Plan</h3>
+                    <StrengthsGapsList strengths={strengths} gaps={gaps} roadmap={roadmap} />
+                </div>
 
-      </div>
+                <CertificationPathwaySequencing frameworks={certRows} roadmap={roadmap} />
 
-    </div>
-  </PageShell>
-);
+                <div className="flex items-center justify-between pt-2">
+                    <Button
+                        variant="secondary"
+                        onClick={() => navigate(ROUTES.ASSESSMENT_SUMMARY)}
+                    >
+                        ← Back to Summary
+                    </Button>
+
+                    <div className="flex gap-3 flex-wrap">
+                        <Button
+                            variant="secondary"
+                            onClick={downloadPdf}
+                            disabled={isPdfGenerating}
+                        >
+                            {isPdfGenerating ? 'Generating PDF…' : 'Download PDF'}
+                        </Button>
+
+                        <Button
+                            variant="secondary"
+                            onClick={() => setShowBenchmark(true)}
+                        >
+                            Benchmark
+                        </Button>
+
+                        <Button
+                            onClick={() => setShowConsultation(true)}
+                        >
+                            Book ESG Consultation
+                        </Button>
+                    </div>
+                </div>
+
+            </div>
+
+            {showBenchmark && <BenchmarkModal scores={resolvedScores} onClose={() => setShowBenchmark(false)} />}
+            {showConsultation && <ConsultationModal onClose={() => setShowConsultation(false)} />}
+
+        </PageShell>
+    );
 }

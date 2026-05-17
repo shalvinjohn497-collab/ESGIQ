@@ -74,13 +74,13 @@ export default function DashboardPage() {
     }, [uploadStatus]);
 
     const metrics = {
-  energyMonitoringMonths: resolvedScores?.filled || 0,
-  electricityMonths: resolvedScores?.filled || 0,
-  waterMonths: 12,
-  wasteMonths: 12,
-  fuelMonths: 4,
-  readiness: resolvedScores?.overall || 78,
-};
+        energyMonitoringMonths: resolvedScores?.filled || 0,
+        electricityMonths: resolvedScores?.filled || 0,
+        waterMonths: resolvedScores?.filledWaterMonths || 0,
+        wasteMonths: resolvedScores?.filledWasteMonths || 0,
+        fuelMonths: resolvedScores?.totalFuelDiesel > 0 ? resolvedScores?.filled || 0 : 0,
+        readiness: resolvedScores?.overall || 0,
+    };
 
     // const riskLevel = resolvedScores.overall >= 75 ? 'low' : resolvedScores.overall >= 55 ? 'medium' : resolvedScores.overall >= 35 ? 'high' : 'critical';
     // const riskColor = riskLevel === 'low' ? C.green : riskLevel === 'medium' ? C.amber : C.rose;
@@ -108,180 +108,175 @@ export default function DashboardPage() {
         : CERT_DASHBOARD_PREVIEWS;
 
     return (
-    <>
-        <AnimatePresence>
-            {!ready && (
-                <ESGProcessingOverlay onComplete={() => setReady(true)} />
-            )}
-        </AnimatePresence>
+        <>
+            <AnimatePresence>
+                {!ready && (
+                    <ESGProcessingOverlay onComplete={() => setReady(true)} />
+                )}
+            </AnimatePresence>
 
-        <PageShell
-            title="ESG Intelligence Overview"
-            subtitle="Operational sustainability readiness and certification intelligence."
-        >
-            <div className="space-y-6">
+            <PageShell
+                title="ESG Intelligence Overview"
+                subtitle="Operational sustainability readiness and certification intelligence."
+            >
+                <div className="space-y-6">
 
-                {/* HERO */}
-               <ReadinessHero
-    score={resolvedScores.overall}
-    metrics={{
-        energyMonitoringMonths: resolvedScores.filled,
-        energyScore: resolvedScores.energy,
-        waterScore: resolvedScores.water,
-        wasteScore: resolvedScores.waste,
-        govScore: resolvedScores.gov,
-    }}
-    radarData={[
-        { subject: 'Energy', A: resolvedScores.energy },
-        { subject: 'Water', A: resolvedScores.water },
-        { subject: 'Waste', A: resolvedScores.waste },
-        { subject: 'Governance', A: resolvedScores.gov },
-        { subject: 'Emissions', A: Math.max(0, 100 - Math.round((resolvedScores.totalEm || 0) / 1.5)) },
-    ]}
-/>
+                    {/* HERO */}
+                    <ReadinessHero
+                        score={resolvedScores.overall}
+                        metrics={{
+                            energyMonitoringMonths: resolvedScores.filled,
+                            energyScore: resolvedScores.energy,
+                            waterScore: resolvedScores.water,
+                            wasteScore: resolvedScores.waste,
+                            govScore: resolvedScores.gov,
+                        }}
+                        radarData={[
+                            { subject: 'Energy', A: resolvedScores.energy },
+                            { subject: 'Water', A: resolvedScores.water },
+                            { subject: 'Waste', A: resolvedScores.waste },
+                            { subject: 'Governance', A: resolvedScores.gov },
+                            { subject: 'Emissions', A: Math.max(0, 100 - Math.round((resolvedScores.totalEm || 0) / 1.5)) },
+                        ]}
+                    />
 
-                {/* VALIDATION + ACTIONS */}
-                
+                    {/* VALIDATION + ACTIONS */}
 
-<div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
 
-  <div style={{ flex: 2, minWidth: 0 }}>
-    <ValidationSummary
-      metrics={{
-      energyMonitoringMonths: resolvedScores?.filled || 0,
-      recycledWaterAvailable: results?.scores?.gov > 50,
-      segregationMaturity: results?.scores?.waste >= 75 ? '3' : results?.scores?.waste >= 50 ? '2' : '1',
-    }}
-      spikeWarningsByCategory={spikeWarningsByCategory}
-      duplicateNoticesByCategory={uploadDuplicateResolution}
-      unitMismatchByCategory={unitMismatchByCategory}
-      consistencyWarnings={results.consistencyWarnings ?? []}
-    />
-  </div>
+                    <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
 
-  <div style={{
-    flex: 1,
-    minWidth: 0,
-    background: '#ffffff',
-    border: '1px solid #e2e8f0',
-    borderRadius: 24,
-    padding: 32,
-  }}>
-    <p style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#94a3b8', marginBottom: 8 }}>
-      Critical Actions
-    </p>
-    <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', marginBottom: 24 }}>
-      Highest Impact Improvements
-    </h3>
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <ActionItem
-        title="Expand Renewable Energy Coverage"
-        impact="+12%"
-        desc="Solar integration improves IGBC and LEED readiness."
-      />
-      <ActionItem
-        title="Improve Monitoring Continuity"
-        impact="+8%"
-        desc="12-month operational evidence unlocks higher certification eligibility."
-      />
-      <ActionItem
-        title="Formalize ESG Governance"
-        impact="+5%"
-        desc="Policy documentation improves ISO 14001 maturity."
-      />
-    </div>
-  </div>
-
-</div>
-                {/* CERTIFICATIONS */}
-                <div>
-
-                    <div className="flex items-center justify-between mb-6">
-                        <div>
-                            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">
-                                Certifications
-                            </p>
-
-                            <h3 className="text-2xl font-bold text-slate-900">
-                                Readiness Matrix
-                            </h3>
+                        <div style={{ flex: 2, minWidth: 0 }}>
+                            <ValidationSummary
+                                metrics={{
+                                    energyMonitoringMonths: resolvedScores?.filled || 0,
+                                    recycledWaterAvailable: results?.scores?.gov > 50,
+                                    segregationMaturity: results?.scores?.waste >= 75 ? '3' : results?.scores?.waste >= 50 ? '2' : '1',
+                                }}
+                                spikeWarningsByCategory={spikeWarningsByCategory}
+                                duplicateNoticesByCategory={uploadDuplicateResolution}
+                                unitMismatchByCategory={unitMismatchByCategory}
+                                consistencyWarnings={results.consistencyWarnings ?? []}
+                            />
                         </div>
-                    </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-
-                        {certPreviews.map((cert) => (
-                            <PremiumCard
-                                key={cert.name}
-                                className="p-6 hover:shadow-md transition-all duration-300"
-                            >
-                                <div className="flex flex-col gap-5">
-
-                                    <div className="flex items-start justify-between">
-                                        <div>
-                                            <h4 className="text-lg font-bold text-slate-900">
-                                                {cert.name}
-                                            </h4>
-
-                                            <p className="text-sm text-slate-500 mt-1">
-                                                Estimated readiness score
-                                            </p>
-                                        </div>
-
-                                        <div className="text-2xl font-black text-emerald-600">
-                                            {cert.score}%
-                                        </div>
-                                    </div>
-
-                                    <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                                        <div
-                                            className="h-full bg-emerald-500 rounded-full"
-                                            style={{ width: `${cert.score}%` }}
-                                        />
-                                    </div>
-
-                                    <div className="flex items-center justify-between text-sm">
-
-                                        <span className="text-slate-500">
-                                            Timeline
-                                        </span>
-
-                                        <span className="font-semibold text-slate-900">
-                                            {cert.time}
-                                        </span>
-
-                                    </div>
-                                    
-                                    {!cert.prerequisitesMet && cert.failedChecks && cert.failedChecks.length > 0 && (
-                                        <PrerequisiteAlert failedChecks={cert.failedChecks} />
+                        <div style={{
+                            flex: 1,
+                            minWidth: 0,
+                            background: '#ffffff',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: 24,
+                            padding: 32,
+                        }}>
+                            <p style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#94a3b8', marginBottom: 8 }}>
+                                Critical Actions
+                            </p>
+                            <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', marginBottom: 24 }}>
+                                Highest Impact Improvements
+                            </h3>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                                {results.insightEvaluation?.gaps?.slice(0, 3).map((gap, i) => (
+                                    <ActionItem
+                                        key={gap.id || i}
+                                        title={gap.gap || gap.text || '—'}
+                                        impact={gap.severity === 'High' ? 'High Priority' : gap.severity === 'Medium' ? 'Medium Priority' : 'Low Priority'}
+                                        desc={gap.action || gap.recommendation || ''}
+                                    />
+                                )) || (
+                                        <p className="text-sm text-slate-400">Complete an assessment to see priority actions.</p>
                                     )}
-
-                                </div>
-                            </PremiumCard>
-                        ))}
+                            </div>
+                        </div>
 
                     </div>
-                </div>
-                
-                {/* REGULATORY READINESS */}
-                <div className="mt-8">
-                    <div className="flex items-center justify-between mb-6">
-                        <div>
-                            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">
-                                Regulatory Compliance
-                            </p>
-                            <h3 className="text-2xl font-bold text-slate-900">
-                                Global Regulatory Readiness
-                            </h3>
+                    {/* CERTIFICATIONS */}
+                    <div>
+
+                        <div className="flex items-center justify-between mb-6">
+                            <div>
+                                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">
+                                    Certifications
+                                </p>
+
+                                <h3 className="text-2xl font-bold text-slate-900">
+                                    Readiness Matrix
+                                </h3>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+
+                            {certPreviews.map((cert) => (
+                                <PremiumCard
+                                    key={cert.name}
+                                    className="p-6 hover:shadow-md transition-all duration-300"
+                                >
+                                    <div className="flex flex-col gap-5">
+
+                                        <div className="flex items-start justify-between">
+                                            <div>
+                                                <h4 className="text-lg font-bold text-slate-900">
+                                                    {cert.name}
+                                                </h4>
+
+                                                <p className="text-sm text-slate-500 mt-1">
+                                                    Estimated readiness score
+                                                </p>
+                                            </div>
+
+                                            <div className="text-2xl font-black text-emerald-600">
+                                                {cert.score}%
+                                            </div>
+                                        </div>
+
+                                        <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                                            <div
+                                                className="h-full bg-emerald-500 rounded-full"
+                                                style={{ width: `${cert.score}%` }}
+                                            />
+                                        </div>
+
+                                        <div className="flex items-center justify-between text-sm">
+
+                                            <span className="text-slate-500">
+                                                Timeline
+                                            </span>
+
+                                            <span className="font-semibold text-slate-900">
+                                                {cert.time}
+                                            </span>
+
+                                        </div>
+
+                                        {!cert.prerequisitesMet && cert.failedChecks && cert.failedChecks.length > 0 && (
+                                            <PrerequisiteAlert failedChecks={cert.failedChecks} />
+                                        )}
+
+                                    </div>
+                                </PremiumCard>
+                            ))}
+
                         </div>
                     </div>
-                    <RegulatoryReadinessTable results={results.regulatoryResults} />
-                </div>
 
-            </div>
-        </PageShell>
-    </>
-);
+                    {/* REGULATORY READINESS */}
+                    <div className="mt-8">
+                        <div className="flex items-center justify-between mb-6">
+                            <div>
+                                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">
+                                    Regulatory Compliance
+                                </p>
+                                <h3 className="text-2xl font-bold text-slate-900">
+                                    Global Regulatory Readiness
+                                </h3>
+                            </div>
+                        </div>
+                        <RegulatoryReadinessTable results={results.regulatoryResults} />
+                    </div>
+
+                </div>
+            </PageShell>
+        </>
+    );
 }
 const ActionItem = ({ title, impact, desc }) => (
     <div className="border-l-2 border-emerald-500 pl-4">

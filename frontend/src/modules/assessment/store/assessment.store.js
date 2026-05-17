@@ -1,26 +1,18 @@
 import { create } from 'zustand';
-import {
-    INIT_ROWS,
-    INIT_FLAGS,
-    INIT_WATER_ROWS,
-    INIT_FUEL_ROWS,
-    INIT_WASTE_ROWS,
-} from '@/services/mock/assessment.mock';
-import { DEFAULT_SECTOR } from '@/constants/sectors';
 
 const useAssessmentStore = create((set) => ({
     step: 1,
-    sector: DEFAULT_SECTOR,
-    rows: INIT_ROWS.map((r) => ({ ...r })),
-    flags: { ...INIT_FLAGS },
-    waterRows: INIT_WATER_ROWS.map((r) => ({ ...r })),
-    fuelRows: INIT_FUEL_ROWS.map((r) => ({ ...r })),
-    wasteRows: INIT_WASTE_ROWS.map((r) => ({ ...r })),
+    sector: null,
+    rows: [],
+    flags: {},
+    waterRows: [],
+    fuelRows: [],
+    wasteRows: [],
     uploadStatus: {
-        electricity: { monthsUploaded: 12, source: 'mock' },
-        water: { monthsUploaded: 12, source: 'mock' },
-        fuel: { monthsUploaded: 12, source: 'mock' },
-        waste: { monthsUploaded: 12, source: 'mock' },
+        electricity: { monthsUploaded: 0, source: null },
+        water: { monthsUploaded: 0, source: null },
+        fuel: { monthsUploaded: 0, source: null },
+        waste: { monthsUploaded: 0, source: null },
     },
     scores: {},
     assessmentId: null,
@@ -31,7 +23,6 @@ const useAssessmentStore = create((set) => ({
         waste: null,
     },
     consistencyWarnings: [],
-
     insights: {
         strengths: [],
         gaps: [],
@@ -98,52 +89,57 @@ const useAssessmentStore = create((set) => ({
             regulatoryResults: Array.isArray(regulatoryResults) ? [...regulatoryResults] : [],
         }),
 
-    hydrateFromApi: (data) => set((s) => ({
-        rows: data.rows?.length ? data.rows : s.rows,
-        waterRows: data.waterRows?.length ? data.waterRows : s.waterRows,
-        fuelRows: data.fuelRows?.length ? data.fuelRows : s.fuelRows,
-        wasteRows: data.wasteRows?.length ? data.wasteRows : s.wasteRows,
-        flags: data.flags && Object.keys(data.flags).length ? data.flags : s.flags,
-        uploadStatus: data.uploadStatus || s.uploadStatus,
-        scores: data.scores && Object.keys(data.scores).length ? data.scores : s.scores,
-        assessmentId: data._id ? data._id : s.assessmentId,
-        sector: data.sector != null && data.sector !== '' ? data.sector : s.sector,
+    hydrateFromApi: (data) => set(() => ({
+        rows: data.rows?.length ? data.rows : [],
+        waterRows: data.waterRows?.length ? data.waterRows : [],
+        fuelRows: data.fuelRows?.length ? data.fuelRows : [],
+        wasteRows: data.wasteRows?.length ? data.wasteRows : [],
+        flags: data.flags && Object.keys(data.flags).length ? data.flags : {},
+        uploadStatus: data.uploadStatus || {
+            electricity: { monthsUploaded: 0, source: null },
+            water: { monthsUploaded: 0, source: null },
+            fuel: { monthsUploaded: 0, source: null },
+            waste: { monthsUploaded: 0, source: null },
+        },
+        scores: data.scores && Object.keys(data.scores).length ? data.scores : {},
+        assessmentId: data._id || null,
+        sector: data.sector ?? null,
         uploadDuplicateResolution:
             data.uploadDuplicateResolution && typeof data.uploadDuplicateResolution === 'object'
-                ? { ...s.uploadDuplicateResolution, ...data.uploadDuplicateResolution }
-                : s.uploadDuplicateResolution,
+                ? data.uploadDuplicateResolution
+                : { electricity: null, water: null, fuel: null, waste: null },
         consistencyWarnings: Array.isArray(data.consistencyWarnings)
             ? [...data.consistencyWarnings]
-            : s.consistencyWarnings,
+            : [],
         insights:
             data.insights && typeof data.insights === 'object'
                 ? {
                       strengths: Array.isArray(data.insights.strengths) ? [...data.insights.strengths] : [],
                       gaps: Array.isArray(data.insights.gaps) ? [...data.insights.gaps] : [],
                   }
-                : s.insights,
+                : { strengths: [], gaps: [] },
         certificationByFramework: Array.isArray(data.certificationByFramework)
             ? [...data.certificationByFramework]
-            : s.certificationByFramework,
+            : [],
         regulatoryResults: Array.isArray(data.regulatoryResults)
             ? [...data.regulatoryResults]
-            : s.regulatoryResults,
+            : [],
     })),
 
     resetAssessment: () =>
         set({
             step: 1,
-            sector: DEFAULT_SECTOR,
-            rows: INIT_ROWS.map((r) => ({ ...r })),
-            flags: { ...INIT_FLAGS },
-            waterRows: INIT_WATER_ROWS.map((r) => ({ ...r })),
-            fuelRows: INIT_FUEL_ROWS.map((r) => ({ ...r })),
-            wasteRows: INIT_WASTE_ROWS.map((r) => ({ ...r })),
+            sector: null,
+            rows: [],
+            flags: {},
+            waterRows: [],
+            fuelRows: [],
+            wasteRows: [],
             uploadStatus: {
-                electricity: { monthsUploaded: 12, source: 'mock' },
-                water: { monthsUploaded: 12, source: 'mock' },
-                fuel: { monthsUploaded: 12, source: 'mock' },
-                waste: { monthsUploaded: 12, source: 'mock' },
+                electricity: { monthsUploaded: 0, source: null },
+                water: { monthsUploaded: 0, source: null },
+                fuel: { monthsUploaded: 0, source: null },
+                waste: { monthsUploaded: 0, source: null },
             },
             scores: {},
             assessmentId: null,

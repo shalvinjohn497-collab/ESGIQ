@@ -68,13 +68,13 @@ export default function SummaryStep() {
     const results = useAssessmentResults();
     const resolvedScores = results.scores;
     const categoryUploadStatuses = results.categoryUploadStatuses;
-    const metrics = {
+  const metrics = {
   energyMonitoringMonths: resolvedScores?.filled || 0,
   electricityMonths: resolvedScores?.filled || 0,
-  waterMonths: 12,
-  wasteMonths: 12,
-  fuelMonths: 4,
-  readiness: resolvedScores?.overall || 78,
+  waterMonths: resolvedScores?.filledWaterMonths || 0,
+  wasteMonths: resolvedScores?.filledWasteMonths || 0,
+  fuelMonths: resolvedScores?.totalFuelDiesel > 0 ? resolvedScores?.filled || 0 : 0,
+  readiness: resolvedScores?.overall || 0,
 };
     // Reads flags/navigation from store
     const { flags, assessmentId, rows, waterRows, fuelRows, wasteRows, uploadDuplicateResolution, uploadStatus } =
@@ -434,23 +434,7 @@ export default function SummaryStep() {
       ← Back
     </button>
     <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-    <button
-      onClick={downloadPdf}
-      disabled={isPdfGenerating}
-      style={{
-        padding: '12px 24px',
-        background: isPdfGenerating ? '#94a3b8' : '#1e293b',
-        border: 'none',
-        borderRadius: 16,
-        fontWeight: 600,
-        fontSize: 14,
-        color: '#ffffff',
-        cursor: isPdfGenerating ? 'not-allowed' : 'pointer',
-        transition: 'background 0.2s',
-      }}
-    >
-      {isPdfGenerating ? 'Generating…' : '📄 Download PDF'}
-    </button>
+   
     <button
       onClick={handleContinue}
       disabled={saving || results.hasBlockingConsistencyErrors}

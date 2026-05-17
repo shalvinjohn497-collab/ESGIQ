@@ -18,14 +18,14 @@ export default function CertificationReadinessMatrix({ frameworks = [] }) {
             {sorted.map((fw) => {
                 const isReady = fw.score >= 60;
                 const tierColor = CERTIFICATION_COLORS[fw.tier] || '#64748b';
-                
+
                 return (
                     <div key={fw.frameworkId || fw.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
                         <div className="flex items-start justify-between mb-3">
                             <div>
                                 <h4 className="text-lg font-bold text-slate-900">{fw.name || fw.frameworkId}</h4>
                                 <div className="flex items-center gap-2 mt-1">
-                                    <span 
+                                    <span
                                         className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded border"
                                         style={{ backgroundColor: `${tierColor}15`, color: tierColor, borderColor: `${tierColor}40` }}
                                     >
@@ -45,7 +45,7 @@ export default function CertificationReadinessMatrix({ frameworks = [] }) {
 
                         {fw.majorGap && (
                             <p className="text-sm text-slate-600 font-medium mb-3">
-                                <span className="text-slate-400 mr-1">Key Gap:</span> 
+                                <span className="text-slate-400 mr-1">Key Gap:</span>
                                 {fw.majorGap}
                             </p>
                         )}
