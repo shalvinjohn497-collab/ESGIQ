@@ -21,7 +21,7 @@ export const pdfController = {
 
     res.json({
       success: true,
-      downloadUrl: `/api/assessments/${id}/pdf/download`,
+      downloadUrl: `/assessments/${id}/pdf/download`,
       filename,
       expiresAt: expiresAt.toISOString(),
     });
