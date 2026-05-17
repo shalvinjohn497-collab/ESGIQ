@@ -12,8 +12,8 @@
         "@/pages/certifications/CertificationsPage",
         "@/pages/reports/ReportsPage",
         "@/pages/settings/SettingsPage",
-        "@/modules/assessment/hooks/useAssessmentScoring",
-        "@/services/mock/assessment.mock"
+        "@/modules/assessment/hooks/useAssessmentScoring"
+        
       ],
       "exports": [
         "AppShell",
@@ -986,8 +986,8 @@
     "src\\modules\\assessment\\store\\assessment.store.js": {
       "type": "source",
       "imports": [
-        "zustand",
-        "@/services/mock/assessment.mock"
+        "zustand"
+        
       ],
       "exports": [
         "default"
@@ -1066,8 +1066,8 @@
         "@/components/cards/StatusCard",
         "@/components/cards/MetricCard",
         "@/components/charts/TrendAreaChart",
-        "@/components/charts/EmissionsChart",
-        "@/services/mock/dashboard.mock"
+        "@/components/charts/EmissionsChart"
+        
       ],
       "exports": [
         "DashboardPage",

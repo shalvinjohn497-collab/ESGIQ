@@ -1,4 +1,4 @@
-import { DEFAULT_SECTOR } from '@/constants/sectors';
+
 
 /**
  * Master list of facility intelligence toggles (order preserved).
@@ -75,7 +75,7 @@ export function getFacilityToggleFieldsForSector(sector) {
  * @param {string | undefined | null} sector
  */
 export function shouldShowBedCount(sector) {
-    return BED_COUNT_SECTORS.has(sector || DEFAULT_SECTOR);
+    return BED_COUNT_SECTORS.has(sector ?? 'HOSP');
 }
 
 export default FACILITY_FIELD_KEYS_BY_SECTOR;

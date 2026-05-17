@@ -23,7 +23,7 @@ import { STATUS } from '@/constants/uploadCategoryStatus';
 import { calculateAllCertifications } from '@/calculations/certifications';
 import { evaluateRegulatoryReadiness } from '@/calculations/regulatory/evaluateRegulatoryReadiness';
 import useAuthStore from '@/store/auth.store';
-import { DEFAULT_SECTOR } from '@/constants/sectors';
+
 import {
   deriveEnergyMetrics,
   deriveWaterMetrics,
@@ -32,7 +32,7 @@ import {
 import { runCrossCategoryConsistencyChecks } from '@/utils/validation/crossCategoryChecks';
 import { evaluateInsights, DEFAULT_BENCHMARKS } from '@/calculations/insights/evaluateInsights';
 import useAssessmentStore from '@/modules/assessment/store/assessment.store';
-
+import { DEFAULT_SECTOR } from '@/constants/sectors';
 export function useAssessmentResults() {
     const { rows, flags } = useAssessmentStore();
     const waterRows = useAssessmentStore((s) => s.waterRows);
