@@ -18,27 +18,33 @@ if (!fs.existsSync(PDF_DIR)) {
 function drawSectionTitle(doc, title) {
   doc.moveDown(1);
   doc.fontSize(14).font('Helvetica-Bold').fillColor('#0f172a').text(title);
-  doc.moveTo(doc.x, doc.y + 2).lineTo(doc.x + 490, doc.y + 2).strokeColor('#e2e8f0').stroke();
+  const lineY = doc.y + 2;
+  const lineX = 50; // ← use fixed margin instead of doc.x (which can be NaN)
+  doc.moveTo(lineX, lineY).lineTo(lineX + 490, lineY).strokeColor('#e2e8f0').stroke();
   doc.moveDown(0.5);
   doc.font('Helvetica').fontSize(10).fillColor('#334155');
 }
 
 function drawKV(doc, label, value) {
-  doc.font('Helvetica-Bold').text(`${label}: `, { continued: true });
-  doc.font('Helvetica').text(String(value ?? '—'));
+  const safeValue = String(value ?? '—');
+  doc
+    .font('Helvetica-Bold').text(`${label}: `, { continued: true })
+    .font('Helvetica').text(safeValue, { continued: false }); // ← explicitly close
+  doc.x = 50; // ← reset to left margin after inline text
 }
 
 function drawTableRow(doc, cols, widths, opts = {}) {
-  const startX = doc.x;
+  const startX = 50; // ← fixed margin, never doc.x
   const y = doc.y;
-  const bold = opts.bold || false;
   cols.forEach((col, i) => {
-    doc.font(bold ? 'Helvetica-Bold' : 'Helvetica')
+    doc.font(opts.bold ? 'Helvetica-Bold' : 'Helvetica')
        .fontSize(9)
-       .text(String(col ?? '—'), startX + widths.slice(0, i).reduce((a, b) => a + b, 0), y, {
-         width: widths[i],
-         align: 'left',
-       });
+       .text(
+         String(col ?? '—'),
+         startX + widths.slice(0, i).reduce((a, b) => a + b, 0),
+         y,
+         { width: widths[i], align: 'left' }
+       );
   });
   doc.moveDown(0.3);
 }

@@ -5,13 +5,9 @@ import { persist } from 'zustand/middleware';
 const useAuthStore = create(
   persist(
     (set) => ({
-      isAuthenticated: true,
-      token: 'demo-token',
-      user: {
-        name: 'Dr. Priya Nair',
-        orgName: 'Sunrise Multispecialty Hospital',
-        sector: 'HOSP',
-      },
+      isAuthenticated: false,
+      token: null,
+      user: null,
       login: (token, user) => set({ isAuthenticated: true, token, user }),
       logout: () => set({ isAuthenticated: false, token: null, user: null }),
       setUser: (user) => set({ user }),
