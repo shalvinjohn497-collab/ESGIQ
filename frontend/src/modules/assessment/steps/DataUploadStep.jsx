@@ -15,6 +15,7 @@ import { PremiumUploadCard } from '../../../components/premium/upload/PremiumUpl
 import { PremiumCard } from '../../../components/premium/shared/PremiumCard';
 import { PageShell } from '../../../components/premium/layout/PageShell';
 import { Building2, ShieldCheck, Zap } from 'lucide-react';
+import UploadedFilesList from '../../../components/premium/upload/UploadedFilesList';
 
 export default function DataUploadStep() {
     const navigate = useNavigate();
@@ -101,63 +102,7 @@ export default function DataUploadStep() {
                 ))}
             </div>
 
-            {/* Manual Electricity Table */}
-            <PremiumCard className="p-8 mb-8">
-                <div className="flex items-start justify-between mb-8">
-                    <div>
-                        <p className="text-[11px] font-black uppercase tracking-[0.2em] text-amber-500 mb-2">
-                            Energy Dataset
-                        </p>
-                        <h3 className="text-2xl font-bold text-slate-900 mb-1">
-                            Monthly Electricity Records
-                        </h3>
-                        <p className="text-sm text-slate-500">
-                            Edit manually or upload Excel above. Scores update in real-time.
-                        </p>
-                    </div>
-                    <div className="p-3 bg-amber-50 rounded-xl">
-                        <Zap className="w-5 h-5 text-amber-500" />
-                    </div>
-                </div>
-
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead>
-                            <tr className="border-b border-slate-100">
-                                {['Month', 'Electricity (kWh)', 'Renewable (kWh)', 'DG Diesel (L)', 'Cost (₹)'].map((h) => (
-                                    <th key={h} className="text-left text-xs font-black uppercase tracking-wider text-slate-400 py-4 pr-4">
-                                        {h}
-                                    </th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {rows.map((row, i) => (
-                                <tr key={row.month} className="border-b border-slate-50">
-                                    <td className="py-4 text-sm font-semibold text-slate-700 pr-4">
-                                        {row.month}
-                                    </td>
-                                    {['elec', 'ren', 'diesel', 'cost'].map((field) => (
-                                        <td key={field} className="py-3 pr-4">
-                                            <input
-                                                type="number"
-                                                value={row[field]}
-                                                onChange={(e) => {
-                                                    const nr = [...rows];
-                                                    nr[i] = { ...nr[i], [field]: Number(e.target.value) || 0 };
-                                                    setRows(nr);
-                                                }}
-                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-emerald-400 focus:bg-white transition-all"
-                                            />
-                                        </td>
-                                    ))}
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </PremiumCard>
-
+           
             {/* Facility Details */}
             <PremiumCard className="p-8 mb-8">
                 <div className="flex items-center gap-4 mb-8">
@@ -315,6 +260,40 @@ export default function DataUploadStep() {
     />
 </div>
 
+<div>
+  <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-3">
+    Daily Operating Hours
+  </label>
+  <input
+    type="number"
+    min={1}
+    max={24}
+    value={flags.operatingHours || ''}
+    onChange={(e) => setFlags({ ...flags, operatingHours: Number(e.target.value) })}
+    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 outline-none focus:border-emerald-400"
+    placeholder="e.g. 10"
+  />
+  <p className="text-xs text-slate-400 mt-2">
+    Average operational hours per day. Used for energy intensity normalisation.
+  </p>
+</div>
+
+<div className="md:col-span-2 xl:col-span-3">
+  <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-3">
+    Reason for Data Non-Availability (optional)
+  </label>
+  <textarea
+    rows={3}
+    value={flags.dataUnavailabilityReason || ''}
+    onChange={(e) => setFlags({ ...flags, dataUnavailabilityReason: e.target.value })}
+    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 outline-none focus:border-emerald-400 resize-none"
+    placeholder="e.g. Electricity bills for Jan–Mar unavailable due to billing dispute. Water records not maintained prior to April."
+  />
+  <p className="text-xs text-slate-400 mt-2">
+    Document any gaps in uploaded data. This is recorded for audit transparency purposes.
+  </p>
+</div>
+
                     {visibleFacilityFields.map(({ k, l }) => (
                         <div key={k} className="flex items-center justify-between border border-slate-100 rounded-2xl px-5 py-4 bg-slate-50/50">
                             <span className="text-sm font-medium text-slate-700">{l}</span>
@@ -328,6 +307,8 @@ export default function DataUploadStep() {
                     ))}
                 </div>
             </PremiumCard>
+
+            <UploadedFilesList />
 
             {/* CTA */}
             <div style={{

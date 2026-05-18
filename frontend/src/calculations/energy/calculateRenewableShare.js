@@ -6,7 +6,8 @@
  */
 export function calculateRenewableShare(totalRenewable, totalElectricity) {
     if (totalElectricity <= 0) return 0;
-    return Math.round((totalRenewable / totalElectricity) * 100);
+    const result = Math.round((totalRenewable / totalElectricity) * 100);
+    return Math.min(result, 100);
 }
 
 export default calculateRenewableShare;

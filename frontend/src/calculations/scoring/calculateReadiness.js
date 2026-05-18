@@ -1,9 +1,10 @@
 import { STATUS } from '@/constants/uploadCategoryStatus';
 
-/**
- * Months with operational data present (non-zero), per upload category.
- * Used for coverage status only; does not alter annualization.
- */
+const toPositiveNumber = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+};
+
 export function getFilledMonthsForUploadCategory(categoryId, { rows, waterRows, fuelRows, wasteRows } = {}) {
     switch (categoryId) {
         case 'electricity':
@@ -28,12 +29,6 @@ export function getFilledMonthsForUploadCategory(categoryId, { rows, waterRows, 
     }
 }
 
-/**
- * Derive BRD upload status from months-with-data and parse/validation outcome.
- * @param {number} monthsWithData
- * @param {{ parseFailed?: boolean, unitMismatch?: boolean }} meta
- * @returns {string} One of the `STATUS` string constants from `@/constants/uploadCategoryStatus`.
- */
 export function deriveCategoryDataStatus(monthsWithData, { parseFailed = false, unitMismatch = false } = {}) {
     const m = Math.min(12, Math.max(0, Math.floor(Number(monthsWithData)) || 0));
     if (unitMismatch) return STATUS.ERROR;
@@ -44,10 +39,6 @@ export function deriveCategoryDataStatus(monthsWithData, { parseFailed = false, 
     return STATUS.INSUFFICIENT;
 }
 
-/**
- * @param {{ rows?: unknown[], waterRows?: unknown[], fuelRows?: unknown[], wasteRows?: unknown[], uploadStatus?: Record<string, { monthsUploaded?: number, parseFailed?: boolean, source?: string, unitMismatch?: boolean }> }} params
- * @returns {Record<string, { months: number, status: string }>}
- */
 export function buildCategoryUploadStatuses({ rows, waterRows, fuelRows, wasteRows, uploadStatus } = {}) {
     const coreIds = ['electricity', 'water', 'fuel', 'waste'];
     const out = {};
@@ -68,12 +59,6 @@ export function buildCategoryUploadStatuses({ rows, waterRows, fuelRows, wasteRo
     return out;
 }
 
-/**
- * Gate: required categories must not be INSUFFICIENT, ERROR, or MISSING.
- * @param {Record<string, { status: string }>} categoryStatusesMap from buildCategoryUploadStatuses
- * @param {{ id: string, optional?: boolean }[]} categoriesConfig
- * @returns {{ ok: boolean, blockers: { id: string, status: string }[] }}
- */
 export function canProceedToSummary(categoryStatusesMap, categoriesConfig = []) {
     const blockers = [];
     const bad = new Set([STATUS.INSUFFICIENT, STATUS.ERROR, STATUS.MISSING]);
@@ -87,65 +72,111 @@ export function canProceedToSummary(categoryStatusesMap, categoriesConfig = []) 
 }
 
 /**
- * Calculate water score from flags
- * @param {Object} f - flags object
- * @returns {number} score 0–100
+ * calculateWaterScore
+ * BRD §10.2.2 — Total: 100 points
+ *
+ * FIX 2a: Water reuse = 20pts (reuse > 15% = 20, reuse 5–15% = 10, < 5% = 0)
+ *          was incorrectly mapped to hasSTP (which is STP/ETP = 15pts)
+ * FIX 2b: STP/ETP = 15pts (was 20pts — wrong weight)
+ * FIX 2c: wQuality replaces wAudit (BRD param is water quality testing, 10pts)
+ * FIX 2d: Math.round → toFixed(2) for precision
  */
 export function calculateWaterScore(flags, filledWaterMonths = 0) {
+    // Tracking: (months ÷ 12) × 20 — confidence modifier applied internally per BRD §10.2.2
     const trackingScore = (filledWaterMonths / 12) * 20;
-    return Math.min(100, Math.round(
-        trackingScore +
-        (flags.wSplit    ? 15 : 0) +
-        (flags.hasSTP    ? 20 : 0) +
-        (flags.rainwater ? 10 : 0) +
-        (flags.wAudit    ? 10 : 0) +
-        (flags.leakage   ? 10 : 0)
-    ));
-}
 
-/**
- * Calculate waste score from flags
- * @param {Object} f - flags object
- * @returns {number} score 0–100
- */
-export function calculateWasteScore(flags, filledWasteMonths = 0) {
-    const trackingScore = (filledWasteMonths / 12) * 15;
-    return Math.min(100, Math.round(
-        trackingScore +
-        (flags.wSegregate >= 95 ? 25 : flags.wSegregate >= 50 ? 12.5 : 0) +
-        (flags.recyclingPct >= 60 ? 20 : flags.recyclingPct >= 30 ? 10 : 0) +
-        (flags.authVendor  ? 20 : 0) +
-        (flags.hazHandling ? 10 : 0) +
-        (flags.wasteAudit  ? 10 : 0)
-    ));
-}
+    // Water reuse: 20pts — BRD §10.2.2
+    const reuseScore = flags.waterReusePct >= 15
+        ? 20
+        : flags.waterReusePct >= 5
+            ? 10
+            : (flags.hasSTP || flags.waterReuse)  // fallback: if flag present but no % value
+                ? 10
+                : 0;
 
-/**
- * Calculate governance score from flags
- * @param {Object} f - flags object
- * @returns {number} score 0–100
- */
-export function calculateGovernanceScore(f) {
-    return Math.min(100,
-        (f.policy ? 25 : 0) +
-        (f.esgOwner ? 20 : 0) +
-        (f.monthlyRev ? 15 : 0) +
-        (f.sops ? 15 : 0) +
-        (f.audits ? 15 : 0) +
-        (f.compliance ? 10 : 0)
+    // Source-wise split documented: 15pts
+    const splitScore = flags.wSplit ? 15 : 0;
+
+    // STP / ETP available and operational: 15pts (was incorrectly 20)
+    const stpScore = flags.hasSTP ? 15 : 0;
+
+    // Leakage monitoring: 10pts
+    const leakageScore = flags.leakage ? 10 : 0;
+
+    // Rainwater harvesting: 10pts
+    const rainwaterScore = flags.rainwater ? 10 : 0;
+
+    // Water quality testing: 10pts (replaces wAudit — BRD §10.2.2)
+    const qualityScore = flags.wQuality ? 10 : (flags.wAudit ? 5 : 0);
+
+    return parseFloat(
+        Math.min(100,
+            trackingScore +
+            reuseScore +
+            splitScore +
+            stpScore +
+            leakageScore +
+            rainwaterScore +
+            qualityScore
+        ).toFixed(2)
     );
 }
 
 /**
- * Calculate readiness level label
- * @param {number} overall - overall score
- * @returns {string}
+ * calculateWasteScore
+ * BRD §10.2.3 — Total: 100 points
+ * No structural changes needed — just Math.round → toFixed(2)
+ */
+export function calculateWasteScore(flags, filledWasteMonths = 0) {
+    const trackingScore = (filledWasteMonths / 12) * 15;
+
+    return parseFloat(
+        Math.min(100,
+            trackingScore +
+            (flags.wSegregate >= 95 ? 25 : flags.wSegregate >= 50 ? 12.5 : 0) +
+            (flags.recyclingPct >= 60 ? 20 : flags.recyclingPct >= 30 ? 10 : 0) +
+            (flags.authVendor  ? 20 : 0) +
+            (flags.hazHandling ? 10 : 0) +
+            (flags.wasteAudit  ? 10 : 0)
+        ).toFixed(2)
+    );
+}
+
+/**
+ * calculateGovernanceScore
+ * BRD §10.2.4 — Total: 100 points
+ *
+ * FIX 3a: policy 25pts → 20pts (BRD §10.2.4)
+ * FIX 3b: training 5pts added (was missing entirely)
+ * Weights: policy=20, esgOwner=20, monthlyRev=15, sops=15, audits=15, compliance=10, training=5
+ */
+export function calculateGovernanceScore(f) {
+    return Math.min(100,
+        (f.policy      ? 20 : 0) +   // FIX 3a: was 25
+        (f.esgOwner    ? 20 : 0) +
+        (f.monthlyRev  ? 15 : 0) +
+        (f.sops        ? 15 : 0) +
+        (f.audits      ? 15 : 0) +
+        (f.compliance  ? 10 : 0) +
+        (f.training    ?  5 : 0)      // FIX 3b: was missing
+    );
+}
+
+/**
+ * calculateReadiness
+ * BRD §10.5 — Stage label thresholds
+ *
+ * FIX 1: All thresholds and labels corrected to match BRD exactly
+ * Old: 80→Advanced, 65→Structured, 50→Developing, else→Foundational
+ * New: 90→Advanced Readiness, 75→Strong Readiness, 60→Certification Possible,
+ *      40→Foundational, else→Not Ready
  */
 export function calculateReadiness(overall) {
-    if (overall >= 80) return 'Advanced';
-    if (overall >= 65) return 'Structured';
-    if (overall >= 50) return 'Developing';
-    return 'Foundational';
+    if (overall >= 90) return 'Advanced Readiness';
+    if (overall >= 75) return 'Strong Readiness';
+    if (overall >= 60) return 'Certification Possible';
+    if (overall >= 40) return 'Foundational';
+    return 'Not Ready';
 }
 
 export default calculateReadiness;

@@ -1,10 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-
-import { C } from '@/theme/colors';
-
-import { CERTIFICATIONS, CERT_DASHBOARD_PREVIEWS } from '@/constants/certifications';
+import { AnimatePresence } from 'framer-motion';
 
 import ESGProcessingOverlay from '@/components/feedback/ESGProcessingOverlay';
 
@@ -23,21 +19,7 @@ import { ROUTES } from '@/constants/routes';
 import { PageShell } from '../../components/premium/layout/PageShell';
 import { ReadinessHero } from '../../components/premium/readiness/ReadinessHero';
 import { ValidationSummary } from '../../components/premium/summary/ValidationSummary';
-import { PremiumCard } from '../../components/premium/shared/PremiumCard';
 import { useCrossCategoryConsistencySync } from '@/modules/assessment/hooks/useCrossCategoryConsistencySync';
-import CERTIFICATION_FRAMEWORKS from '@/constants/certificationFrameworks';
-import PrerequisiteAlert from '@/components/cards/PrerequisiteAlert';
-import RegulatoryReadinessTable from '@/components/premium/readiness/RegulatoryReadinessTable';
-
-// const sectionVariants = {
-//     hidden: { opacity: 0, y: 8 },
-//     visible: (delay) => ({
-//         opacity: 1,
-//         y: 0,
-//         transition: { duration: 0.38, ease: 'easeOut', delay },
-//     }),
-// };
-
 
 export default function DashboardPage() {
     const [ready, setReady] = useState(false);
@@ -73,39 +55,7 @@ export default function DashboardPage() {
         return Object.keys(out).length ? out : null;
     }, [uploadStatus]);
 
-    const metrics = {
-        energyMonitoringMonths: resolvedScores?.filled || 0,
-        electricityMonths: resolvedScores?.filled || 0,
-        waterMonths: resolvedScores?.filledWaterMonths || 0,
-        wasteMonths: resolvedScores?.filledWasteMonths || 0,
-        fuelMonths: resolvedScores?.totalFuelDiesel > 0 ? resolvedScores?.filled || 0 : 0,
-        readiness: resolvedScores?.overall || 0,
-    };
-
-    // const riskLevel = resolvedScores.overall >= 75 ? 'low' : resolvedScores.overall >= 55 ? 'medium' : resolvedScores.overall >= 35 ? 'high' : 'critical';
-    // const riskColor = riskLevel === 'low' ? C.green : riskLevel === 'medium' ? C.amber : C.rose;
-    // const envScore = Math.round((resolvedScores.energy * 0.35 + resolvedScores.water * 0.25 + resolvedScores.waste * 0.20));
     const onStartAssessment = () => navigate(ROUTES.ASSESSMENT_UPLOAD);
-
-    // const topActions = [
-    //     { action: 'Install rooftop solar system', impact: '+12', certs: 'IGBC, GRI' },
-    //     { action: 'Deploy centralized energy monitoring', impact: '+8', certs: 'ISO 50001' },
-    //     { action: 'Formalize EMS documentation', impact: '+5', certs: 'ISO 14001' },
-    // ];
-
-    // Derived from unified certifications constant — no local duplication
-    const certPreviews = results?.certificationByFramework?.length
-        ? results.certificationByFramework.slice(0, 4).map(c => {
-            const fw = CERTIFICATION_FRAMEWORKS.find(f => f.id === c.frameworkId);
-            return {
-                name: fw?.name || c.frameworkId,
-                score: c.score,
-                time: c.timeline,
-                prerequisitesMet: c.prerequisitesMet,
-                failedChecks: c.failedChecks,
-            };
-        })
-        : CERT_DASHBOARD_PREVIEWS;
 
     return (
         <>
@@ -140,137 +90,147 @@ export default function DashboardPage() {
                         ]}
                     />
 
-                    {/* VALIDATION + ACTIONS */}
+                    {/* VALIDATION */}
+                    <ValidationSummary
+                        metrics={{
+                            energyMonitoringMonths: resolvedScores?.filled || 0,
+                            recycledWaterAvailable: results?.scores?.gov > 50,
+                            segregationMaturity: results?.scores?.waste >= 75 ? '3' : results?.scores?.waste >= 50 ? '2' : '1',
+                        }}
+                        spikeWarningsByCategory={spikeWarningsByCategory}
+                        duplicateNoticesByCategory={uploadDuplicateResolution}
+                        unitMismatchByCategory={unitMismatchByCategory}
+                        consistencyWarnings={results.consistencyWarnings ?? []}
+                    />
 
-
-                    <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
-
-                        <div style={{ flex: 2, minWidth: 0 }}>
-                            <ValidationSummary
-                                metrics={{
-                                    energyMonitoringMonths: resolvedScores?.filled || 0,
-                                    recycledWaterAvailable: results?.scores?.gov > 50,
-                                    segregationMaturity: results?.scores?.waste >= 75 ? '3' : results?.scores?.waste >= 50 ? '2' : '1',
-                                }}
-                                spikeWarningsByCategory={spikeWarningsByCategory}
-                                duplicateNoticesByCategory={uploadDuplicateResolution}
-                                unitMismatchByCategory={unitMismatchByCategory}
-                                consistencyWarnings={results.consistencyWarnings ?? []}
-                            />
-                        </div>
-
+                    {/* RECENT ASSESSMENTS + CTA */}
+                    <div style={{
+                        background: '#ffffff',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: 24,
+                        padding: 32,
+                    }}>
                         <div style={{
-                            flex: 1,
-                            minWidth: 0,
-                            background: '#ffffff',
-                            border: '1px solid #e2e8f0',
-                            borderRadius: 24,
-                            padding: 32,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            marginBottom: 24,
                         }}>
-                            <p style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#94a3b8', marginBottom: 8 }}>
-                                Critical Actions
-                            </p>
-                            <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', marginBottom: 24 }}>
-                                Highest Impact Improvements
-                            </h3>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                                {results.insightEvaluation?.gaps?.slice(0, 3).map((gap, i) => (
-                                    <ActionItem
-                                        key={gap.id || i}
-                                        title={gap.gap || gap.text || '—'}
-                                        impact={gap.severity === 'High' ? 'High Priority' : gap.severity === 'Medium' ? 'Medium Priority' : 'Low Priority'}
-                                        desc={gap.action || gap.recommendation || ''}
-                                    />
-                                )) || (
-                                        <p className="text-sm text-slate-400">Complete an assessment to see priority actions.</p>
-                                    )}
-                            </div>
-                        </div>
-
-                    </div>
-                    {/* CERTIFICATIONS */}
-                    <div>
-
-                        <div className="flex items-center justify-between mb-6">
                             <div>
-                                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">
-                                    Certifications
+                                <p style={{
+                                    fontSize: 10,
+                                    fontWeight: 900,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.2em',
+                                    color: '#94a3b8',
+                                    marginBottom: 6,
+                                }}>
+                                    Assessments
                                 </p>
-
-                                <h3 className="text-2xl font-bold text-slate-900">
-                                    Readiness Matrix
+                                <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a' }}>
+                                    Recent Assessments
                                 </h3>
                             </div>
+
+                            <button
+                                onClick={onStartAssessment}
+                                style={{
+                                    background: '#10b981',
+                                    color: '#ffffff',
+                                    border: 'none',
+                                    borderRadius: 14,
+                                    padding: '12px 28px',
+                                    fontSize: 14,
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 8,
+                                }}
+                            >
+                                + Start New Assessment
+                            </button>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                        {/* Assessment history rows */}
+                        {resolvedScores?.overall > 0 ? (
+                            <div style={{
+                                border: '1px solid #f1f5f9',
+                                borderRadius: 16,
+                                overflow: 'hidden',
+                            }}>
+                                <div style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: '1fr 120px 120px 140px',
+                                    padding: '10px 20px',
+                                    background: '#f8fafc',
+                                    borderBottom: '1px solid #f1f5f9',
+                                }}>
+                                    {['Assessment', 'Overall Score', 'Status', 'Date'].map(h => (
+                                        <span key={h} style={{
+                                            fontSize: 11,
+                                            fontWeight: 700,
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.1em',
+                                            color: '#94a3b8',
+                                        }}>
+                                            {h}
+                                        </span>
+                                    ))}
+                                </div>
 
-                            {certPreviews.map((cert) => (
-                                <PremiumCard
-                                    key={cert.name}
-                                    className="p-6 hover:shadow-md transition-all duration-300"
-                                >
-                                    <div className="flex flex-col gap-5">
-
-                                        <div className="flex items-start justify-between">
-                                            <div>
-                                                <h4 className="text-lg font-bold text-slate-900">
-                                                    {cert.name}
-                                                </h4>
-
-                                                <p className="text-sm text-slate-500 mt-1">
-                                                    Estimated readiness score
-                                                </p>
-                                            </div>
-
-                                            <div className="text-2xl font-black text-emerald-600">
-                                                {cert.score}%
-                                            </div>
-                                        </div>
-
-                                        <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                                            <div
-                                                className="h-full bg-emerald-500 rounded-full"
-                                                style={{ width: `${cert.score}%` }}
-                                            />
-                                        </div>
-
-                                        <div className="flex items-center justify-between text-sm">
-
-                                            <span className="text-slate-500">
-                                                Timeline
-                                            </span>
-
-                                            <span className="font-semibold text-slate-900">
-                                                {cert.time}
-                                            </span>
-
-                                        </div>
-
-                                        {!cert.prerequisitesMet && cert.failedChecks && cert.failedChecks.length > 0 && (
-                                            <PrerequisiteAlert failedChecks={cert.failedChecks} />
-                                        )}
-
-                                    </div>
-                                </PremiumCard>
-                            ))}
-
-                        </div>
-                    </div>
-
-                    {/* REGULATORY READINESS */}
-                    <div className="mt-8">
-                        <div className="flex items-center justify-between mb-6">
-                            <div>
-                                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">
-                                    Regulatory Compliance
-                                </p>
-                                <h3 className="text-2xl font-bold text-slate-900">
-                                    Global Regulatory Readiness
-                                </h3>
+                                <div style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: '1fr 120px 120px 140px',
+                                    padding: '16px 20px',
+                                    alignItems: 'center',
+                                    borderBottom: '1px solid #f8fafc',
+                                }}>
+                                    <span style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>
+                                        Current Assessment
+                                    </span>
+                                    <span style={{ fontSize: 14, fontWeight: 700, color: '#10b981' }}>
+                                        {resolvedScores.overall}%
+                                    </span>
+                                    <span style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        padding: '3px 10px',
+                                        borderRadius: 99,
+                                        fontSize: 11,
+                                        fontWeight: 700,
+                                        background: resolvedScores.overall >= 75 ? '#d1fae5' : resolvedScores.overall >= 40 ? '#fef3c7' : '#fee2e2',
+                                        color: resolvedScores.overall >= 75 ? '#065f46' : resolvedScores.overall >= 40 ? '#92400e' : '#991b1b',
+                                        width: 'fit-content',
+                                    }}>
+                                        {resolvedScores.overall >= 75 ? 'Strong Readiness'
+                                            : resolvedScores.overall >= 60 ? 'Cert Possible'
+                                            : resolvedScores.overall >= 40 ? 'Foundational'
+                                            : 'Not Ready'}
+                                    </span>
+                                    <span style={{ fontSize: 13, color: '#64748b' }}>
+                                        {new Date().toLocaleDateString('en-IN', {
+                                            day: '2-digit',
+                                            month: 'short',
+                                            year: 'numeric',
+                                        })}
+                                    </span>
+                                </div>
                             </div>
-                        </div>
-                        <RegulatoryReadinessTable results={results.regulatoryResults} />
+                        ) : (
+                            <div style={{
+                                textAlign: 'center',
+                                padding: '48px 24px',
+                                color: '#94a3b8',
+                            }}>
+                                <p style={{ fontSize: 15, marginBottom: 8 }}>
+                                    No assessments yet.
+                                </p>
+                                <p style={{ fontSize: 13 }}>
+                                    Click "Start New Assessment" to begin your sustainability readiness evaluation.
+                                </p>
+                            </div>
+                        )}
                     </div>
 
                 </div>
@@ -278,24 +238,3 @@ export default function DashboardPage() {
         </>
     );
 }
-const ActionItem = ({ title, impact, desc }) => (
-    <div className="border-l-2 border-emerald-500 pl-4">
-
-        <div className="flex items-center justify-between mb-1">
-
-            <h4 className="font-semibold text-slate-900">
-                {title}
-            </h4>
-
-            <span className="text-sm font-bold text-emerald-600">
-                {impact}
-            </span>
-
-        </div>
-
-        <p className="text-sm text-slate-500 leading-relaxed">
-            {desc}
-        </p>
-
-    </div>
-);
