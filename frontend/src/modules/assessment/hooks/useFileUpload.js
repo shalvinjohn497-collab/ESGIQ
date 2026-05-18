@@ -91,6 +91,8 @@ export function useFileUpload() {
                         delete next.unitMismatch;
                         delete next.foundUnits;
                     }
+                    next.fileName = file.name;
+                    next.uploadedAt = new Date().toISOString();
                     useAssessmentStore.getState().setUploadStatus(c, next);
                 }
             };

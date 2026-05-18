@@ -1,6 +1,9 @@
 import { PageShell } from '../../../components/premium/layout/PageShell';
 import { PremiumCard } from '../../../components/premium/shared/PremiumCard';
 import { ValidationSummary } from '../../../components/premium/summary/ValidationSummary';
+import UploadOverviewTable from '../../../components/premium/summary/UploadOverviewTable';
+import ConfidenceAssumptions from '@/components/premium/summary/ConfidenceAssumptions';
+import ReadinessPreCheck from '@/components/premium/summary/ReadinessPreCheck';
 import { useNavigate } from 'react-router-dom';
 import { useModuleValidation } from '@/modules/assessment/hooks/useModuleValidation';
 import useAssessmentStore from '@/modules/assessment/store/assessment.store';
@@ -101,6 +104,10 @@ export default function SummaryStep() {
 
     const annElec = results.annualizedElec;
     const elecAnnualBlocked = results.electricityAnnualizationBlocked;
+    const annWater = results.annualizedWater ?? 0;
+    const annWaste = results.annualizedWaste ?? 0;
+    const waterAnnualBlocked = results.waterAnnualizationBlocked;
+    const wasteAnnualBlocked = results.wasteAnnualizationBlocked;
 
     const kpis = useMemo(() => {
         const intensity = Number(resolvedScores.intensity) || 0;
@@ -210,6 +217,8 @@ export default function SummaryStep() {
   >
     <div className="space-y-8">
 
+      <UploadOverviewTable categoryUploadStatuses={results.categoryUploadStatuses} />
+
       {/* Validation Intelligence */}
       <ValidationSummary
         metrics={{
@@ -223,48 +232,7 @@ export default function SummaryStep() {
         consistencyWarnings={results.consistencyWarnings ?? []}
       />
 
-      {/* Upload Overview */}
-      <PremiumCard className="p-8">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h3 className="text-2xl font-bold text-slate-900">
-              Upload Coverage
-            </h3>
-            <p className="text-slate-500 mt-1">
-              Operational datasets detected and validated.
-            </p>
-          </div>
-
-          <div className="px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold">
-            {resolvedScores.filled}/12 Months Verified
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {catUpload.map((r) => (
-            <div
-              key={r.key}
-              className="border border-slate-200 rounded-2xl p-5"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-lg font-semibold text-slate-900">
-                  {r.icon} {r.cat}
-                </span>
-
-                <span
-                  className={`text-xs font-bold px-2 py-1 rounded-lg ${r.badgeClass}`}
-                >
-                  {r.statusLabel}
-                </span>
-              </div>
-
-              <div className="text-sm text-slate-500">
-                {r.months} tracked
-              </div>
-            </div>
-          ))}
-        </div>
-      </PremiumCard>
+     
 
       {/* KPI GRID */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -336,6 +304,26 @@ export default function SummaryStep() {
               resolvedScores.totalDiesel.toLocaleString(),
               'Actual',
             ],
+            [
+              'Water (KL)',
+              resolvedScores.totalWater?.toLocaleString() ?? '0',
+              waterAnnualBlocked ? '—' : annWater.toLocaleString(),
+              waterAnnualBlocked
+                ? 'Blocked (data error)'
+                : resolvedScores.filledWaterMonths > 0 && resolvedScores.filledWaterMonths < 12
+                ? `÷${resolvedScores.filledWaterMonths}×12`
+                : 'Actual',
+            ],
+            [
+              'Waste (kg)',
+              resolvedScores.totalWaste?.toLocaleString() ?? '0',
+              wasteAnnualBlocked ? '—' : annWaste.toLocaleString(),
+              wasteAnnualBlocked
+                ? 'Blocked (data error)'
+                : resolvedScores.filledWasteMonths > 0 && resolvedScores.filledWasteMonths < 12
+                ? `÷${resolvedScores.filledWasteMonths}×12`
+                : 'Actual',
+            ],
           ].map(([m, u, a, l]) => (
             <div
               key={m}
@@ -403,6 +391,15 @@ export default function SummaryStep() {
           ))}
         </div>
       </PremiumCard>
+
+      <ConfidenceAssumptions scores={resolvedScores} />
+
+      <ReadinessPreCheck
+        scores={resolvedScores}
+        categoryUploadStatuses={results.categoryUploadStatuses}
+        hasBlockingConsistencyErrors={results.hasBlockingConsistencyErrors}
+        consistencyWarnings={results.consistencyWarnings}
+      />
 
       {/* Bottom Actions */}
       <div style={{
